@@ -880,8 +880,21 @@ and print_def def =
       print_expression destexpr;
       print " }";
       force_new_line()
+  | DECORATOR (d, loc) ->
+     setLoc loc;
+     print_decorator d;
+     force_new_line ()
 
-
+and print_decorator = function
+  | Begin (n, b, _) ->
+     print ("@begin(" ^ n ^ ")");
+     print_block b
+  | End (n, b, _) ->
+     print ("@end(" ^ n ^ ")");
+     print_block b
+  | Callback (n, _) ->
+     print ("@callback(" ^ n ^ ")")
+     
 (* sm: print a comment if the printComments flag is set *)
 and comprint (str : string) : unit =
 begin

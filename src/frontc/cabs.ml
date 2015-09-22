@@ -173,7 +173,12 @@ and definition =
  | TRANSFORMER of definition * definition list * cabsloc
  (* expression transformer: source and destination *)
  | EXPRTRANSFORMER of expression * expression * cabsloc
+ | DECORATOR of decorators * cabsloc
 
+and decorators =
+  | Begin of string * block * cabsloc
+  | End of string * block * cabsloc
+  | Callback of string * cabsloc
 
 (* the string is a file name, and then the list of toplevel forms *)
 and file = string * definition list

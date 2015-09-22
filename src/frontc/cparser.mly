@@ -302,6 +302,8 @@ let transformOffsetOf (speclist, dtype) member =
 %token<Cabs.cabsloc> PRAGMA
 %token PRAGMA_EOL
 
+%token<Cabs.cabsloc> BEGIN_DECO END_DECO CALLBACK_DECO
+
 /* sm: cabs tree transformation specification keywords */
 %token<Cabs.cabsloc> AT_TRANSFORM AT_TRANSFORMEXPR AT_SPECIFIER AT_EXPR
 %token AT_NAME
@@ -407,7 +409,9 @@ location:
 /*** Global Definition ***/
 global:
 | declaration                           { $1 }
-| function_def                          { $1 } 
+| function_def                          { $1 }
+| decorator                             { DECORATOR (fst $1, snd $1)  }
+
 /*(* Some C header files ar shared with the C++ compiler and have linkage 
    * specification *)*/
 | EXTERN string_constant declaration    { LINKAGE (fst $2, (*handleLoc*) (snd $2), [ $3 ]) }
@@ -446,6 +450,12 @@ global:
   }
 | location error SEMICOLON { PRAGMA (VARIABLE "parse_error", $1) }
 ;
+
+decorator:
+| BEGIN_DECO LPAREN IDENT RPAREN block { Begin (fst $3, fst3 $5, snd3 $5), $1 }
+| END_DECO LPAREN IDENT RPAREN block { End (fst $3, fst3 $5, snd3 $5), $1 }
+| CALLBACK_DECO LPAREN IDENT RPAREN { !Lexerhack.add_type ("callback_" ^ fst $3);
+				      Callback (fst $3, snd $3), $1 }
 
 id_or_typename:
     IDENT				{fst $1}

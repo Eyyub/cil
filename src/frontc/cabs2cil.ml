@@ -805,6 +805,59 @@ let canDropStatement (s: stmt) : bool =
   ignore (visitCilStmt vis s);
   !pRes
 
+class begin_deco_visitor name block = object
+  inherit nopCilVisitor
+
+  method vfunc fdec =
+    if fdec.svar.vname = name then (
+      fdec.sbody.battrs <- block.battrs @ fdec.sbody.battrs;
+      fdec.sbody.bstmts <-  block.bstmts @ fdec.sbody.bstmts;
+    );
+    DoChildren
+
+end
+
+class block_before_return_visitor end_block = object
+  inherit nopCilVisitor
+
+  method vblock block =
+    block.bstmts <-
+      List.fold_left
+    	(fun acc stmt ->
+    	 match stmt.skind with
+    	 | Return _ -> stmt :: (end_block.bstmts @ acc)
+    	 | _ -> stmt :: acc) [] block.bstmts
+      |> List.rev;
+    DoChildren
+end
+
+class end_deco_visitor name block = object
+  inherit nopCilVisitor
+
+  method vfunc fdec =
+    if fdec.svar.vname = name then
+      fdec.sbody <-
+	visitCilBlock (new block_before_return_visitor block) fdec.sbody;
+    DoChildren
+
+end
+
+class callback_deco_visitor name = object
+  inherit nopCilVisitor
+
+  method vfunc fdec =
+    if fdec.svar.vname = name then
+      (let name = "callback_" ^ name in
+       let ty = {tname = name;
+		 ttype = TPtr (fdec.svar.vtype, fdec.svar.vattr);
+		 treferenced = false} in
+       let named_ty = TNamed(ty, []) in
+       addLocalToEnv (kindPlusName "type" name) (EnvTyp named_ty);
+       cabsPushGlobal (GType (ty, !currentLoc)));
+    SkipChildren
+				     
+end
+
 (**** Occasionally we see structs with no name and no fields *)
 
 
@@ -5707,7 +5760,19 @@ and doDecl (isglobal: bool) : A.definition -> chunk = function
   | A.TRANSFORMER (_, _, _) -> E.s (E.bug "TRANSFORMER in cabs2cil input")
   | A.EXPRTRANSFORMER (_, _, _) -> 
       E.s (E.bug "EXPRTRANSFORMER in cabs2cil input")
-        
+  | A.DECORATOR (deco, loc) ->
+     (match deco with
+      | Begin (n, blk, _) ->
+	 let blk = doBody blk |> c2block in
+	 ignore (List.map (visitCilGlobal (new begin_deco_visitor n blk)) !theFile);
+	 empty
+      | End (n, blk, _) ->
+     	 let blk = doBody blk |> c2block in
+	 ignore (List.map (visitCilGlobal (new end_deco_visitor n blk)) !theFile);
+	 empty
+      | Callback (n, _) ->
+	 ignore (List.map (visitCilGlobal (new callback_deco_visitor n)) !theFile);
+	 empty)
   (* If there are multiple definitions of extern inline, turn all but the 
    * first into a prototype *)
   | A.FUNDEF (((specs,(n,dt,a,loc')) : A.single_name),
