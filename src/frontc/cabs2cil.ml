@@ -3347,6 +3347,8 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
         let res = Const(CStr "exp_nothing") in
         finishExp empty res (typeOf res)
 
+    | A.KOOCVARIABLE (modname, name) ->
+       doExp asconst (A.VARIABLE (modname ^ "_" ^ name)) what
     (* Do the potential lvalues first *)
     | A.VARIABLE n -> begin
         (* Look up in the environment *)
@@ -3937,7 +3939,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                                                A.CAST (t, A.SINGLE_INIT e2)))))
               what
         | A.PAREN e1 -> doExp asconst (A.BINARY(A.ASSIGN,e1,e2)) what 
-        | (A.VARIABLE _ | A.UNARY (A.MEMOF, _) | (* Regular lvalues *)
+        | (A.VARIABLE _ | A.KOOCVARIABLE _ | A.UNARY (A.MEMOF, _) | (* Regular lvalues *)
            A.INDEX _ | A.MEMBEROF _ | A.MEMBEROFPTR _ ) -> begin
              if asconst then ignore (warn "ASSIGN in constant");
              let (se1, e1', lvt) = doExp false e1 (AExp None) in
@@ -4085,7 +4087,8 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
               (Lval tmp)
               intType
     end
-
+    | A.KOOCALL (modname, funcname, args) ->
+       doExp asconst (A.CALL (VARIABLE (modname ^ "_" ^ funcname), args)) what
     | A.CALL(f, args) -> 
         if asconst then
           ignore (warn "CALL in constant");
@@ -4489,7 +4492,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
         finishExp (!prechunk ()) !pres !prestype
 
           
-    | A.COMMA el -> 
+    | A.COMMA el ->
         if asconst then 
           ignore (warn "COMMA in constant");
         let rec loop sofar = function
@@ -4506,7 +4509,6 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
           | [] -> E.s (error "empty COMMA expression")
         in
         loop empty el
-          
     | A.QUESTION (e1,e2,e3) when what = ADrop -> 
         if asconst then
           ignore (warn "QUESTION with ADrop in constant");
@@ -5772,7 +5774,9 @@ and doDecl (isglobal: bool) : A.definition -> chunk = function
 	 empty
       | Callback (n, _) ->
 	 ignore (List.map (visitCilGlobal (new callback_deco_visitor n)) !theFile);
-	 empty)
+	 empty
+      (* | Mod (n, blk, _) -> *)
+      | _ -> assert false)
   (* If there are multiple definitions of extern inline, turn all but the 
    * first into a prototype *)
   | A.FUNDEF (((specs,(n,dt,a,loc')) : A.single_name),

@@ -565,9 +565,13 @@ rule initial =
 |               "@specifier"            {AT_SPECIFIER (currentLoc ())}
 |               "@expr"                 {AT_EXPR (currentLoc ())}
 |               "@name"                 {AT_NAME}
+					
 |               "@begin"                {BEGIN_DECO (currentLoc())}
 |               "@end"                  {END_DECO (currentLoc())}
 |               "@callback"             {CALLBACK_DECO (currentLoc())}
+|               "@module"               {MODULE_DECO (currentLoc())}
+|               "@implementation"       {IMPL_DECO (currentLoc())}
+|               "@import"               {IMPORT_DECO (currentLoc())}
 (* __extension__ is a black. The parser runs into some conflicts if we let it
  * pass *)
 |               "__extension__"         {addWhite lexbuf; initial lexbuf }

@@ -393,9 +393,11 @@ and get_operator exp =
   | QUESTION _ -> ("", 2)
   | CAST _ -> ("", 13)
   | CALL _ -> ("", 15)
+  | KOOCALL _ -> ("", 15)
   | COMMA _ -> ("", 0)
   | CONSTANT _ -> ("", 16)
   | VARIABLE name -> ("", 16)
+  | KOOCVARIABLE _ -> ("", 16)
   | EXPR_SIZEOF exp -> ("", 16)
   | TYPE_SIZEOF _ -> ("", 16)
   | EXPR_ALIGNOF exp -> ("", 16)
@@ -498,6 +500,10 @@ and print_expression_level (lvl: int) (exp : expression) =
       print "(";
       print_comma_exps args;
       print ")"
+  | KOOCALL (modname, funcname, args) ->
+     print ("[" ^ modname ^ " " ^ funcname ^ " ");
+     List.iter (fun a -> print ":"; print_expression a; print " ") args;
+     print "]"
   | COMMA exps ->
       print_comma_exps exps
   | CONSTANT cst ->
@@ -511,6 +517,8 @@ and print_expression_level (lvl: int) (exp : expression) =
   | VARIABLE name ->
       comprint "variable";
       print name
+  | KOOCVARIABLE (modname, varname) ->
+     print ("[" ^ modname ^ "." ^ varname ^ "]");
   | EXPR_SIZEOF exp ->
       print "sizeof";
       print_expression_level 0 exp
@@ -894,7 +902,15 @@ and print_decorator = function
      print_block b
   | Callback (n, _) ->
      print ("@callback(" ^ n ^ ")")
-     
+  | Mod (n, b, _) ->
+     print ("@module(" ^ n ^ ")");
+     print_block b
+  | Mod_impl (n, b, _) ->
+     print ("@implementation(" ^ n ^ ")");
+     print_block b
+  | Import (n, _) ->
+     print ("@import " ^ n)
+
 (* sm: print a comment if the printComments flag is set *)
 and comprint (str : string) : unit =
 begin

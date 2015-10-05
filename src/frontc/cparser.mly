@@ -302,7 +302,7 @@ let transformOffsetOf (speclist, dtype) member =
 %token<Cabs.cabsloc> PRAGMA
 %token PRAGMA_EOL
 
-%token<Cabs.cabsloc> BEGIN_DECO END_DECO CALLBACK_DECO
+%token<Cabs.cabsloc> BEGIN_DECO END_DECO CALLBACK_DECO MODULE_DECO IMPORT_DECO IMPL_DECO
 
 /* sm: cabs tree transformation specification keywords */
 %token<Cabs.cabsloc> AT_TRANSFORM AT_TRANSFORMEXPR AT_SPECIFIER AT_EXPR
@@ -456,6 +456,9 @@ decorator:
 | END_DECO LPAREN IDENT RPAREN block { End (fst $3, fst3 $5, snd3 $5), $1 }
 | CALLBACK_DECO LPAREN IDENT RPAREN { !Lexerhack.add_type ("callback_" ^ fst $3);
 				      Callback (fst $3, snd $3), $1 }
+| MODULE_DECO IDENT block           { Mod (fst $2, fst3 $3, snd3 $3), $1}
+| IMPL_DECO IDENT block             { Mod_impl (fst $2, fst3 $3, snd3 $3), $1}
+| IMPORT_DECO IDENT                 { Import (fst $2, snd $2), $1 }
 
 id_or_typename:
     IDENT				{fst $1}
@@ -473,6 +476,8 @@ maybecomma:
 primary_expression:                     /*(* 6.5.1. *)*/
 |		IDENT
 		        {VARIABLE (fst $1), snd $1}
+|               koocvariable
+                        { $1 }
 |        	constant
 		        {CONSTANT (fst $1), snd $1}
 |		paren_comma_expression  
@@ -483,7 +488,27 @@ primary_expression:                     /*(* 6.5.1. *)*/
      /*(* Next is Scott's transformer *)*/
 |               AT_EXPR LPAREN IDENT RPAREN         /* expression pattern variable */
                          { EXPR_PATTERN(fst $3), $1 }
+|               koocall
+		        { $1 }
 ;
+
+koocvariable:
+| LBRACKET IDENT DOT IDENT RBRACKET { KOOCVARIABLE (fst $2, fst $4), snd $2 }
+
+koocall:
+| LBRACKET IDENT IDENT opt_koocall_param_list RBRACKET
+	   { KOOCALL (fst $2, fst $3, $4), snd $2 }
+
+opt_koocall_param_list:
+  /* empty */ { [] }
+| koocall_param_list { $1 }
+
+koocall_param_list:
+| koocall_param { [$1] }
+| koocall_param koocall_param_list { $1 :: $2 }
+
+koocall_param:
+| COLON expression { fst $2 }
 
 postfix_expression:                     /*(* 6.5.2 *)*/
 |               primary_expression     

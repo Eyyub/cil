@@ -331,9 +331,25 @@ and childrenDefinition vis d =
       let dl' = mapNoCopyList (visitCabsDefinition vis) dl in
       if dl' != dl then LINKAGE (n, l, dl') else d
       
+  | DECORATOR deco ->
+     children_decorator vis deco
   | TRANSFORMER _ -> d
   | EXPRTRANSFORMER _ -> d
-  | DECORATOR _ -> d
+
+and children_decorator vis deco = match deco with
+  | Begin (s, blk, loc) ->
+     let blk' = visitCabsBlock vis blk in
+     if blk != blk' then Begin (s, blk', loc) else deco
+  | End (s, blk, loc) ->
+     let blk' = visitCabsBlock vis blk in
+     if blk != blk' then End (s, blk', loc) else deco
+  | Mod (s, blk, loc) ->
+     let blk' = visitCabsBlock vis blk in
+     if blk != blk' then Mod (s, blk', loc) else deco
+  | Mod_impl (s, blk, loc) ->
+     let blk' = visitCabsBlock vis blk in
+     if blk != blk' then Mod_impl (s, blk', loc) else deco
+  | _ -> deco
 
 and visitCabsBlock vis (b: block) : block = 
   doVisit vis vis#vblock childrenBlock b
@@ -494,6 +510,7 @@ and childrenExpression vis e =
       let f' = ve f in
       let el' = mapNoCopy ve el in
       if f' != f || el' != el then CALL (f', el') else e
+  | KOOCALL _ -> e
   | COMMA el -> 
       let el' = mapNoCopy ve el in
       if el' != el then COMMA (el') else e
@@ -504,6 +521,7 @@ and childrenExpression vis e =
   | VARIABLE s -> 
       let s' = vis#vvar s in
       if s' != s then VARIABLE s' else e
+  | KOOCVARIABLE _ -> e
   | EXPR_SIZEOF (e1) -> 
       let e1' = ve e1 in
       if e1' != e1 then EXPR_SIZEOF (e1') else e
