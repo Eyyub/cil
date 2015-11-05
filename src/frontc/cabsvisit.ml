@@ -330,9 +330,10 @@ and childrenDefinition vis d =
   | LINKAGE (n, l, dl) -> 
       let dl' = mapNoCopyList (visitCabsDefinition vis) dl in
       if dl' != dl then LINKAGE (n, l, dl') else d
-      
-  | DECORATOR deco ->
-     children_decorator vis deco
+
+  | DECORATOR (deco, l) ->
+     let deco' = children_decorator vis deco in
+     if deco' != deco then DECORATOR (deco', l) else d
   | TRANSFORMER _ -> d
   | EXPRTRANSFORMER _ -> d
 

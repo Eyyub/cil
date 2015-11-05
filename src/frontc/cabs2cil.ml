@@ -805,61 +805,7 @@ let canDropStatement (s: stmt) : bool =
   ignore (visitCilStmt vis s);
   !pRes
 
-class begin_deco_visitor name block = object
-  inherit nopCilVisitor
-
-  method vfunc fdec =
-    if fdec.svar.vname = name then (
-      fdec.sbody.battrs <- block.battrs @ fdec.sbody.battrs;
-      fdec.sbody.bstmts <-  block.bstmts @ fdec.sbody.bstmts;
-    );
-    DoChildren
-
-end
-
-class block_before_return_visitor end_block = object
-  inherit nopCilVisitor
-
-  method vblock block =
-    block.bstmts <-
-      List.fold_left
-    	(fun acc stmt ->
-    	 match stmt.skind with
-    	 | Return _ -> stmt :: (end_block.bstmts @ acc)
-    	 | _ -> stmt :: acc) [] block.bstmts
-      |> List.rev;
-    DoChildren
-end
-
-class end_deco_visitor name block = object
-  inherit nopCilVisitor
-
-  method vfunc fdec =
-    if fdec.svar.vname = name then
-      fdec.sbody <-
-	visitCilBlock (new block_before_return_visitor block) fdec.sbody;
-    DoChildren
-
-end
-
-class callback_deco_visitor name = object
-  inherit nopCilVisitor
-
-  method vfunc fdec =
-    if fdec.svar.vname = name then
-      (let name = "callback_" ^ name in
-       let ty = {tname = name;
-		 ttype = TPtr (fdec.svar.vtype, fdec.svar.vattr);
-		 treferenced = false} in
-       let named_ty = TNamed(ty, []) in
-       addLocalToEnv (kindPlusName "type" name) (EnvTyp named_ty);
-       cabsPushGlobal (GType (ty, !currentLoc)));
-    SkipChildren
-				     
-end
-
 (**** Occasionally we see structs with no name and no fields *)
-
 
 module BlockChunk = 
   struct
@@ -1135,6 +1081,173 @@ module BlockChunk =
 
 open BlockChunk 
 
+module Kooc = struct
+
+    class begin_deco_visitor name block = object
+      inherit nopCilVisitor
+
+      method! vfunc fdec =
+        if fdec.svar.vname = name then (
+          fdec.sbody.battrs <- block.battrs @ fdec.sbody.battrs;
+          fdec.sbody.bstmts <-  block.bstmts @ fdec.sbody.bstmts;
+        );
+        DoChildren
+
+    end
+
+    class block_before_return_visitor end_block = object
+      inherit nopCilVisitor
+
+      method! vblock block =
+        block.bstmts <-
+          List.fold_left
+    	    (fun acc stmt ->
+    	     match stmt.skind with
+    	     | Return _ -> stmt :: (end_block.bstmts @ acc)
+    	     | _ -> stmt :: acc) [] block.bstmts
+          |> List.rev;
+        DoChildren
+    end
+
+    class end_deco_visitor name block = object
+      inherit nopCilVisitor
+
+      method! vfunc fdec =
+        if fdec.svar.vname = name then
+          fdec.sbody <-
+	    visitCilBlock (new block_before_return_visitor block) fdec.sbody;
+        DoChildren
+
+    end
+
+    class callback_deco_visitor name = object
+      inherit nopCilVisitor
+
+      method! vfunc fdec =
+        if fdec.svar.vname = name then
+          (let name = "callback_" ^ name in
+           let ty = {tname = name;
+		     ttype = TPtr (fdec.svar.vtype, fdec.svar.vattr);
+		     treferenced = false} in
+           let named_ty = TNamed(ty, []) in
+           addLocalToEnv (kindPlusName "type" name) (EnvTyp named_ty);
+           cabsPushGlobal (GType (ty, !currentLoc)));
+        SkipChildren
+    end
+
+    (* let mangle_ikind_typ = function *)
+    (*   | IChar -> "4char" *)
+    (*   | IInt -> "3int" *)
+    (*   | IShort -> "5short" *)
+    (*   | ILong -> "4long" *)
+    (*   | _ -> assert false *)
+
+    (* let mangle_fkind_typ = function *)
+    (*   | FFloat -> "5float" *)
+    (*   | FDouble -> "6double" *)
+    (*   | _ -> assert false *)
+
+    (* let rec mangle_typ = function *)
+    (*   | TVoid _ -> "4void" *)
+    (*   | TInt (ikind, _) -> mangle_ikind_typ ikind *)
+    (*   | TFloat (fkind, _) -> mangle_fkind_typ fkind *)
+    (*   | TPtr (typ, _) -> assert false *)
+    (*   | TArray (typ, _, _) -> assert false *)
+    (*   | TFun (ret, params, _, _) -> *)
+    (*      params *)
+    (*      |> Cil.argsToList *)
+    (*      |> List.map (fun (_, typ, _) -> typ) *)
+    (*      |> List.map mangle_typ *)
+    (*      |> List.fold_left (^) "" *)
+    (*   | TNamed ({tname; _}, _) -> Printf.sprintf "%d%s" (String.length tname) tname *)
+    (*   | TComp ({cstruct; cname; _}, _) -> *)
+    (*      let ty = if cstruct then "struct" else "union" in *)
+    (*      let n = String.length ty + String.length cname + 1 (\* _ *\) in *)
+    (*      Printf.sprintf "%d%s_%s" n ty cname *)
+    (*   | TEnum ({ename; _}, _) -> *)
+    (*      let n = String.length ename + 5 (\* enum_ *\) in *)
+    (*      Printf.sprintf "%denum_%s" n ename *)
+    (*   | TBuiltin_va_list _ -> assert false *)
+
+    (* let kooc_mangle modname name typ = *)
+    (*   let open Printf in *)
+    (*   let mangled_mn = sprintf "%d%s" (String.length modname) modname in *)
+    (*   let mangled_name = sprintf "%d%s" (String.length name) name in *)
+    (*   Printf.sprintf "__KOOC_%s_%s_%s" mangled_mn mangled_name (mangle_typ typ) *)
+
+    (* class module_deco_visitor modname = object *)
+    (*   inherit nopCilVisitor *)
+
+    (*   method! vblock b = print_endline "toz"; DoChildren *)
+
+    (*   method! vvrbl v = print_endline "tching"; DoChildren *)
+    (*   method! vvdec dec = *)
+    (*     print_endline "hey"; *)
+    (*     dec.vname <- kooc_mangle modname dec.vname dec.vtype; *)
+    (*     SkipChildren *)
+    (* end *)
+
+    let mangle_typ = function
+      | Tvoid -> "4void"
+      | Tchar -> "4char"
+      | Tbool -> "4bool"
+      | Tshort -> "5short"
+      | Tint -> "3int"
+      | Tlong -> "4long"
+      | Tint64 -> "5int64"
+      | Tfloat -> "5float"
+      | Tdouble -> "6double"
+      | Tnamed name -> Printf.sprintf "%d%s" (String.length name) name
+      | Tstruct (name, _, _) ->
+         let n = String.length name + 7 (* _ + struct *) in
+         Printf.sprintf "%dstruct_%s" n name
+      | Tunion (name, _, _) ->
+         let n = String.length name + 6 (* _ + union *) in
+         Printf.sprintf "%dunion_%s" n name
+      | Tenum (name, _, _) ->
+         let n = String.length name + 5 (* _ + enum *) in
+         Printf.sprintf "%denum_%s" n name
+      | _ -> E.s (E.bug "Can't mangle type")
+
+    let kooc_mangle v modname fname ret_ty ty =
+      Printf.sprintf "__KOOC_%d%s_%d%s%s%s"
+                     (String.length modname) modname
+                     (String.length fname) fname
+                     ret_ty
+                     (if ty = "" && v = `Fun then "4void" else "")
+
+    let change_name fname = function
+      | DECDEF ((specs, [(_, proto, attrs, loc), a]), loc') ->
+         DECDEF ((specs, [(fname, proto, attrs, loc), a]), loc')
+      | d -> d
+
+    class module_deco_visitor modname = object
+      inherit Cabsvisit.nopCabsVisitor
+
+      method vdef decl = match decl with
+        | DECDEF (([SpecType ret_ty], init_names), _) ->
+           (match init_names with
+           | [(fname, PROTO (JUSTBASE, params, _), _, _), _] ->
+              let fname =
+                List.map fst params
+                |> List.fold_left (fun acc ->
+                                   function
+                                   | [SpecType t] -> acc ^ mangle_typ t
+                                   | _ -> acc) "" 
+                |> kooc_mangle `Fun modname fname (mangle_typ ret_ty)
+              in
+              print_endline fname;
+              Cabsvisit.ChangeTo ([change_name fname decl])
+            | [(vname, JUSTBASE, _, _), _] ->
+               let vname = kooc_mangle `Var modname vname (mangle_typ ret_ty) "" in
+               Cabsvisit.ChangeTo ([change_name vname decl])
+            | _ -> Cabsvisit.SkipChildren
+           );
+           (* Cabsvisit.SkipChildren *)
+           (* let names = List.map (fun ((name, decl_ty, _, _), _) -> name, ty) init_names in *)
+        | _ -> Cabsvisit.SkipChildren
+    end
+end
 
 (************ Labels ***********)
 (* Since we turn dowhile and for loops into while we need to take care in 
@@ -1437,7 +1550,7 @@ let rec castTo ?(fromsource=false)
            * modifying some attributes *)
     | TComp (comp1, a1), TComp (comp2, a2) when comp1.ckey = comp2.ckey -> 
         result
-          
+
           (** If we try to pass a transparent union value to a function 
            * expecting a transparent union argument, the argument type would 
            * have been changed to the type of the first argument, and we'll 
@@ -5724,10 +5837,9 @@ and doDecl (isglobal: bool) : A.definition -> chunk = function
           acc @@ createLocal spec_res name
       in
       let res = List.fold_left doOneDeclarator empty nl in
-(*
-      ignore (E.log "after doDecl %a: res=%a\n" 
-           d_loc !currentLoc d_chunk res);
-*)
+
+      (* ignore (E.log "after doDecl %a: res=%a\n"  *)
+      (*      d_loc !currentLoc d_chunk res); *)
       res
 
 
@@ -5763,20 +5875,8 @@ and doDecl (isglobal: bool) : A.definition -> chunk = function
   | A.EXPRTRANSFORMER (_, _, _) -> 
       E.s (E.bug "EXPRTRANSFORMER in cabs2cil input")
   | A.DECORATOR (deco, loc) ->
-     (match deco with
-      | Begin (n, blk, _) ->
-	 let blk = doBody blk |> c2block in
-	 ignore (List.map (visitCilGlobal (new begin_deco_visitor n blk)) !theFile);
-	 empty
-      | End (n, blk, _) ->
-     	 let blk = doBody blk |> c2block in
-	 ignore (List.map (visitCilGlobal (new end_deco_visitor n blk)) !theFile);
-	 empty
-      | Callback (n, _) ->
-	 ignore (List.map (visitCilGlobal (new callback_deco_visitor n)) !theFile);
-	 empty
-      (* | Mod (n, blk, _) -> *)
-      | _ -> assert false)
+     do_kooc_decorator deco
+
   (* If there are multiple definitions of extern inline, turn all but the 
    * first into a prototype *)
   | A.FUNDEF (((specs,(n,dt,a,loc')) : A.single_name),
@@ -6392,8 +6492,8 @@ and assignInit (lv: lval)
   end
 
   (* Now define the processors for body and statement *)
-and doBody (blk: A.block) : chunk = 
-  enterScope ();
+and doBody ?(global=false) (blk: A.block) : chunk = 
+  if not global then enterScope ();
   (* Rename the labels and add them to the environment *)
   List.iter (fun l -> ignore (genNewLocalLabel l)) blk.blabels;
   (* See if we have some attributes *)
@@ -6402,12 +6502,12 @@ and doBody (blk: A.block) : chunk =
   let bodychunk = 
     afterConversion
       (List.fold_left   (* !!! @ evaluates its arguments backwards *)
-         (fun prev s -> let res = doStatement s in 
+         (fun prev s -> let res = doStatement ~global s in 
                         prev @@ res)
          empty
          blk.A.bstmts)
   in
-  exitScope ();
+  if not global then exitScope ();
 
 
   if battrs == [] then
@@ -6421,7 +6521,7 @@ and doBody (blk: A.block) : chunk =
     }
   end
       
-and doStatement (s : A.statement) : chunk = 
+and doStatement ?(global=false) (s : A.statement) : chunk = 
   try
     match s with
       A.NOP _ -> skipChunk
@@ -6628,7 +6728,7 @@ and doStatement (s : A.statement) : chunk =
       end
 
     | A.DEFINITION d ->
-        let s = doDecl false d  in 
+        let s = doDecl global d  in 
 (*
         ignore (E.log "Def at %a: %a\n" d_loc !currentLoc d_chunk s);
 *)
@@ -6721,6 +6821,27 @@ and doStatement (s : A.statement) : chunk =
     consLabel "booo_statement" empty (convLoc (C.get_statementloc s)) false
   end
 
+and do_kooc_decorator = function
+  | Begin (n, blk, _) ->
+     let blk = doBody blk |> c2block in
+     ignore (List.map (visitCilGlobal (new Kooc.begin_deco_visitor n blk)) !theFile);
+     empty
+  | End (n, blk, _) ->
+     let blk = doBody blk |> c2block in
+     ignore (List.map (visitCilGlobal (new Kooc.end_deco_visitor n blk)) !theFile);
+     empty
+  | Callback (n, _) ->
+     ignore (List.map (visitCilGlobal (new Kooc.callback_deco_visitor n)) !theFile);
+     empty
+  | Mod (n, blk, _) ->
+     print_endline "Mod";
+     List.iter (fun s -> 
+                Cabsvisit.visitCabsStatement (new Kooc.module_deco_visitor n) s
+                |> List.iter (fun s -> doStatement ~global:true s |> ignore))
+                 blk.bstmts
+     |> ignore;
+     empty
+  | _ -> assert false
 
 let rec stripParenLocal e = match e with
   | A.PAREN e2 -> stripParenLocal e2

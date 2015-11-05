@@ -173,9 +173,9 @@ and definition =
  | TRANSFORMER of definition * definition list * cabsloc
  (* expression transformer: source and destination *)
  | EXPRTRANSFORMER of expression * expression * cabsloc
- | DECORATOR of decorators * cabsloc
+ | DECORATOR of kooc_decorator * cabsloc
 
-and decorators =
+and kooc_decorator =
   | Begin of string * block * cabsloc
   | End of string * block * cabsloc
   | Callback of string * cabsloc

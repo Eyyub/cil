@@ -232,6 +232,7 @@ and print_decl (n: string) = function
       if e <> NOTHING then print_expression e;
       print "]"
   | PROTO(d, args, isva) ->
+     print_endline "protopoto";
       comprint "proto(";
       print_decl n d;
       print "(";
@@ -306,6 +307,7 @@ and print_field (name, widtho) =
 
 and print_init_name_group (specs, names) =
   print_specifiers specs;
+  print_endline "toz ";
   print_commas false print_init_name names
     
 and print_single_name (specs, name) =
