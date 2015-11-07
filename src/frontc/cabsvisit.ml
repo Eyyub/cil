@@ -350,6 +350,9 @@ and children_decorator vis deco = match deco with
   | Mod_impl (s, blk, loc) ->
      let blk' = visitCabsBlock vis blk in
      if blk != blk' then Mod_impl (s, blk', loc) else deco
+  | Class (s, blk, loc) ->
+     let blk' = visitCabsBlock vis blk in
+     if blk != blk' then Class (s, blk', loc) else deco
   | _ -> deco
 
 and visitCabsBlock vis (b: block) : block = 

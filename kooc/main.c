@@ -46,17 +46,25 @@ int	main(void)
   [Bli.par] = loool([Foo bar :3 :8 :3+8 :[Toz baw] :[Baw.toz]]);
   return (0);
 }*/
-@module Foo
+/*@module Foo
 {
   char a = 'c';
   int foobar(char c, int a);
   int toz();
+  typedef struct l {} L;
 }
 
 int __KOOC_3Foo_3toz4void() { return 0;}
-int __KOOC_3Foo_6foobar3int4char3int(char c, int a) { return 0; }
+int __KOOC_3Foo_6foobar3int4char3int(char c, int a) { return 0; }*/
+
 /*
 int a;
 double a;*/
-int main(void) { __KOOC_3Foo_3toz4void();printf("%c\n", __KOOC_3Foo_1a4char); __KOOC_3Foo_6foobar3int4char3int('l', 3);return (0);}
+@module Bar {
+  int foo(char c, int a);
+  int a = 3;
+}
+int main(void) { 
+  /*__KOOC_3Foo_3toz4void();printf("%c\n", __KOOC_3Foo_1a4char); __KOOC_3Foo_6foobar3int4char3int('l', 3);*/
+return (0);}
 

@@ -153,6 +153,8 @@ and global =
   | GFun of fundec * location           
      (** A function definition. *)
 
+  | GModule of moduleinfo * location
+
   | GAsm of string * location           (** Global asm statement. These ones 
                                             can contain only a template *)
   | GPragma of attribute * location     (** Pragmas at top level. Use the same 
@@ -1092,6 +1094,11 @@ an example (from gcc manual):
 
 *)
 
+and moduleinfo =
+  {
+    mname : string;
+    mbody : global list;
+  }
 (** Describes a location in a source file. *)
 and location = { 
     line: int;		   (** The line number. -1 means "do not know" *)

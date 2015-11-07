@@ -248,11 +248,27 @@ let interpret_character_constant char_list =
 let theFile : global list ref = ref []
 let theFileTypes : global list ref = ref []
 
-let initGlobals () = theFile := []; theFileTypes := []
+let module_globals : global list ref = ref []
+let module_global_types : global list ref = ref []
 
-    
+let current_globals = ref theFile
+let current_global_types = ref theFileTypes
+
+let initGlobals () = !current_globals := []; !current_global_types := []
+
+let clean_module_globals () =
+  module_globals := [];
+  module_global_types := []
+
 let cabsPushGlobal (g: global) = 
-  pushGlobal g ~types:theFileTypes ~variables:theFile
+  pushGlobal g ~types:!current_global_types ~variables:!current_globals
+
+let with_module_do f =
+  current_globals := module_globals;
+  current_global_types :=  module_global_types;
+  ignore (f ());
+  current_global_types := theFileTypes;
+  current_globals := theFile
 
 (* Keep track of some variable ids that must be turned into definitions. We 
  * do this when we encounter what appears a definition of a global but 
@@ -289,7 +305,7 @@ let popGlobals () =
 
     | x :: rest -> revonto (x :: tail) rest
   in
-  revonto (revonto [] !theFile) !theFileTypes
+  revonto (revonto [] !(!current_globals)) !(!current_global_types)
 
 (* Like Cil.mkCastT, but it calls typeForInsertedCast *)
 let makeCastT ~(e: exp) ~(oldt: typ) ~(newt: typ) = 
@@ -1245,7 +1261,13 @@ module Kooc = struct
            );
            (* Cabsvisit.SkipChildren *)
            (* let names = List.map (fun ((name, decl_ty, _, _), _) -> name, ty) init_names in *)
-        | _ -> Cabsvisit.SkipChildren
+        | _ -> Cprint.print_def decl; Cabsvisit.SkipChildren
+    end
+
+    class class_deco_visitor name = object
+      inherit Cabsvisit.nopCabsVisitor
+
+                
     end
 end
 
@@ -1960,9 +1982,9 @@ let makeGlobalVarinfo (isadef: bool) (vi: varinfo) : varinfo * bool =
        inline one *)
     if (not !Cil.oldstyleExternInline) && oldvi.vstorage = Extern && oldvi.vinline then begin
       H.remove alreadyDefined oldvi.vname;
-      theFile := Util.list_map (fun g -> match g with
+      !current_globals := Util.list_map (fun g -> match g with
 	   | GFun (fi, l) when fi.svar == oldvi -> GVarDecl(fi.svar, l)
-	   | x -> x) !theFile
+	   | x -> x) !(!current_globals)
     end;
     (* It was already defined. We must reuse the varinfo. But clean up the 
      * storage.  *)
@@ -6824,22 +6846,22 @@ and doStatement ?(global=false) (s : A.statement) : chunk =
 and do_kooc_decorator = function
   | Begin (n, blk, _) ->
      let blk = doBody blk |> c2block in
-     ignore (List.map (visitCilGlobal (new Kooc.begin_deco_visitor n blk)) !theFile);
+     ignore (List.map (visitCilGlobal (new Kooc.begin_deco_visitor n blk)) !(!current_globals));
      empty
   | End (n, blk, _) ->
      let blk = doBody blk |> c2block in
-     ignore (List.map (visitCilGlobal (new Kooc.end_deco_visitor n blk)) !theFile);
+     ignore (List.map (visitCilGlobal (new Kooc.end_deco_visitor n blk)) !(!current_globals));
      empty
   | Callback (n, _) ->
-     ignore (List.map (visitCilGlobal (new Kooc.callback_deco_visitor n)) !theFile);
+     ignore (List.map (visitCilGlobal (new Kooc.callback_deco_visitor n)) !(!current_globals));
      empty
-  | Mod (n, blk, _) ->
-     print_endline "Mod";
-     List.iter (fun s -> 
-                Cabsvisit.visitCabsStatement (new Kooc.module_deco_visitor n) s
-                |> List.iter (fun s -> doStatement ~global:true s |> ignore))
-                 blk.bstmts
-     |> ignore;
+
+  | Mod (mname, blk, loc) ->
+     let modloc = convLoc loc in
+     currentLoc := modloc;
+     with_module_do (fun () -> doBody ~global:true blk);
+     cabsPushGlobal (GModule ({mname; mbody = !module_global_types @ !module_globals }, modloc));
+     clean_module_globals ();
      empty
   | _ -> assert false
 
@@ -6925,8 +6947,8 @@ let convFile (f : A.file) : Cil.file =
           Buffer.add_string buff "// End of CABS form\n";
           close_in temp_cabs;
           (* Try to pop the last thing in the file *)
-          (match !theFile with 
-            _ :: rest -> theFile := rest
+          (match !(!current_globals) with 
+            _ :: rest -> !current_globals := rest
           | _ -> ());
           (* Insert in the file a GText *)
           cabsPushGlobal (GText(Buffer.contents buff))

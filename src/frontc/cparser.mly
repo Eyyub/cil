@@ -302,7 +302,7 @@ let transformOffsetOf (speclist, dtype) member =
 %token<Cabs.cabsloc> PRAGMA
 %token PRAGMA_EOL
 
-%token<Cabs.cabsloc> BEGIN_DECO END_DECO CALLBACK_DECO MODULE_DECO IMPORT_DECO IMPL_DECO
+%token<Cabs.cabsloc> BEGIN_DECO END_DECO CALLBACK_DECO MODULE_DECO IMPORT_DECO IMPL_DECO CLASS_DECO
 
 /* sm: cabs tree transformation specification keywords */
 %token<Cabs.cabsloc> AT_TRANSFORM AT_TRANSFORMEXPR AT_SPECIFIER AT_EXPR
@@ -459,6 +459,7 @@ decorator:
 | MODULE_DECO IDENT block           { Mod (fst $2, fst3 $3, snd3 $3), $1}
 | IMPL_DECO IDENT block             { Mod_impl (fst $2, fst3 $3, snd3 $3), $1}
 | IMPORT_DECO IDENT                 { Import (fst $2, snd $2), $1 }
+| CLASS_DECO IDENT block            { Class (fst $2, fst3 $3, snd3 $3), $1}
 
 id_or_typename:
     IDENT				{fst $1}

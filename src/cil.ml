@@ -200,8 +200,10 @@ and global =
       * type. *)
 
 
-  | GFun of fundec * location           
+  | GFun of fundec * location
      (** A function definition. *)
+
+  | GModule of moduleinfo * location
 
   | GAsm of string * location           (** Global asm statement. These ones 
                                             can contain only a template *)
@@ -866,6 +868,11 @@ and typsig =
   | TSEnum of string * attribute list
   | TSBase of typ
 
+and moduleinfo =
+  {
+    mname : string;
+    mbody : global list;
+  }
 let locUnknown = { line = -1; 
 		   file = ""; 
 		   byte = -1;}
@@ -1074,15 +1081,16 @@ let get_instrLoc (inst : instr) =
     | Asm(_, _, _, _, _, loc) -> loc
 let get_globalLoc (g : global) =
   match g with
-  | GFun(_,l) -> (l)
-  | GType(_,l) -> (l)
-  | GEnumTag(_,l) -> (l) 
-  | GEnumTagDecl(_,l) -> (l) 
-  | GCompTag(_,l) -> (l) 
-  | GCompTagDecl(_,l) -> (l) 
-  | GVarDecl(_,l) -> (l) 
-  | GVar(_,_,l) -> (l)
-  | GAsm(_,l) -> (l)
+  | GFun(_,l)
+  | GType(_,l)
+  | GEnumTag(_,l)
+  | GEnumTagDecl(_,l)
+  | GCompTag(_,l)
+  | GCompTagDecl(_,l)
+  | GVarDecl(_,l)
+  | GVar(_,_,l)
+  | GModule (_, l)
+  | GAsm(_,l)
   | GPragma(_,l) -> (l) 
   | GText(_) -> locUnknown
 
@@ -4057,6 +4065,12 @@ class defaultCilPrinterClass : cilPrinter = object (self)
             (self#pVDecl () vi)
             ++ text ";\n"
 
+    | GModule ({mname; mbody}, l) ->
+       self#pLineDirective l ++
+         text (Printf.sprintf "@module %s {\n" mname) ++
+           ((List.map (self#pGlobal ()) mbody) |> List.fold_left (++) (text ""))
+
+       ++ text "}\n"
     | GAsm (s, l) ->
         self#pLineDirective l ++
           text ("__asm__(\"" ^ escape_string s ^ "\");\n")
@@ -4540,6 +4554,7 @@ let d_shortglobal () = function
   | GEnumTag(ei,_) -> dprintf "definition of enum %s" ei.ename
   | GEnumTagDecl(ei,_) -> dprintf "declaration of enum %s" ei.ename
   | GFun(fd, _) -> dprintf "definition of %s" fd.svar.vname
+  | GModule (mi, _) -> dprintf "declaration of %s" mi.mname
   | GText _ -> text "GText"
   | GAsm _ -> text "GAsm"
 

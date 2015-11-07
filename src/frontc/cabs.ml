@@ -182,6 +182,7 @@ and kooc_decorator =
   | Mod of string * block * cabsloc
   | Mod_impl of string * block * cabsloc
   | Import of string * cabsloc
+  | Class of string * block * cabsloc
 (* the string is a file name, and then the list of toplevel forms *)
 and file = string * definition list
 
