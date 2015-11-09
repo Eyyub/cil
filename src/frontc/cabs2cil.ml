@@ -1951,7 +1951,7 @@ let extInlineSuffRe = Str.regexp "\\(.+\\)__extinline"
  * whether the variable exists already in the environment *)
 let makeGlobalVarinfo (isadef: bool) (vi: varinfo) : varinfo * bool =
   let debug = false in
-  if not !cacheGlobals then vi, false else
+  if (*not !cacheGlobals*) true then vi, false else
   try (* See if already defined, in the global environment. We could also 
        * look it up in the whole environment but in that case we might see a 
        * local. This can happen when we declare an extern variable with 
@@ -6861,6 +6861,14 @@ and do_kooc_decorator = function
      currentLoc := modloc;
      with_module_do (fun () -> doBody ~global:true blk);
      cabsPushGlobal (GModule ({mname; mbody = !module_global_types @ !module_globals }, modloc));
+     clean_module_globals ();
+     empty
+
+  | Mod_impl (iname, blk, loc) ->
+     let implloc = convLoc loc in
+     currentLoc := implloc;
+     with_module_do (fun () -> doBody ~global:true blk);
+     cabsPushGlobal (GImpl ({iname; ibody = !module_global_types @ !module_globals }, implloc));
      clean_module_globals ();
      empty
   | _ -> assert false

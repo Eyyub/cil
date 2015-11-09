@@ -205,6 +205,8 @@ and global =
 
   | GModule of moduleinfo * location
 
+  | GImpl of implinfo * location
+
   | GAsm of string * location           (** Global asm statement. These ones 
                                             can contain only a template *)
   | GPragma of attribute * location     (** Pragmas at top level. Use the same 
@@ -873,6 +875,13 @@ and moduleinfo =
     mname : string;
     mbody : global list;
   }
+
+and implinfo =
+  {
+    iname : string;
+    ibody : global list;
+  }
+
 let locUnknown = { line = -1; 
 		   file = ""; 
 		   byte = -1;}
@@ -1090,6 +1099,7 @@ let get_globalLoc (g : global) =
   | GVarDecl(_,l)
   | GVar(_,_,l)
   | GModule (_, l)
+  | GImpl (_, l)
   | GAsm(_,l)
   | GPragma(_,l) -> (l) 
   | GText(_) -> locUnknown
@@ -4071,6 +4081,13 @@ class defaultCilPrinterClass : cilPrinter = object (self)
            ((List.map (self#pGlobal ()) mbody) |> List.fold_left (++) (text ""))
 
        ++ text "}\n"
+
+    | GImpl ({iname; ibody}, l) ->
+       self#pLineDirective l ++
+         text (Printf.sprintf "@implementation %s {\n" iname) ++
+           ((List.map (self#pGlobal ()) ibody) |> List.fold_left (++) (text ""))
+       ++ text "}\n"
+
     | GAsm (s, l) ->
         self#pLineDirective l ++
           text ("__asm__(\"" ^ escape_string s ^ "\");\n")
@@ -4555,6 +4572,7 @@ let d_shortglobal () = function
   | GEnumTagDecl(ei,_) -> dprintf "declaration of enum %s" ei.ename
   | GFun(fd, _) -> dprintf "definition of %s" fd.svar.vname
   | GModule (mi, _) -> dprintf "declaration of %s" mi.mname
+  | GImpl (ii, _) -> dprintf "definition of module %s" ii.iname
   | GText _ -> text "GText"
   | GAsm _ -> text "GAsm"
 

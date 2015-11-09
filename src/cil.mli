@@ -155,6 +155,8 @@ and global =
 
   | GModule of moduleinfo * location
 
+  | GImpl of implinfo * location
+
   | GAsm of string * location           (** Global asm statement. These ones 
                                             can contain only a template *)
   | GPragma of attribute * location     (** Pragmas at top level. Use the same 
@@ -1099,6 +1101,13 @@ and moduleinfo =
     mname : string;
     mbody : global list;
   }
+
+and implinfo =
+  {
+    iname : string;
+    ibody : global list;
+  }
+
 (** Describes a location in a source file. *)
 and location = { 
     line: int;		   (** The line number. -1 means "do not know" *)
