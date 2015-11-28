@@ -302,6 +302,7 @@ let transformOffsetOf (speclist, dtype) member =
 %token<Cabs.cabsloc> PRAGMA
 %token PRAGMA_EOL
 
+%token ANNOT
 %token<Cabs.cabsloc> BEGIN_DECO END_DECO CALLBACK_DECO MODULE_DECO IMPORT_DECO IMPL_DECO CLASS_DECO
 
 /* sm: cabs tree transformation specification keywords */
@@ -457,7 +458,7 @@ decorator:
 | CALLBACK_DECO LPAREN IDENT RPAREN { !Lexerhack.add_type ("callback_" ^ fst $3);
 				      Callback (fst $3, snd $3), $1 }
 | MODULE_DECO IDENT block           { Mod (fst $2, fst3 $3, snd3 $3), $1}
-| IMPL_DECO IDENT block             { Mod_impl (fst $2, fst3 $3, snd3 $3), $1}
+| IMPL_DECO IDENT LBRACE globals RBRACE { Mod_impl (fst $2, $4, $1), $1}
 | IMPORT_DECO IDENT                 { Import (fst $2, snd $2), $1 }
 | CLASS_DECO IDENT block            { Class (fst $2, fst3 $3, snd3 $3), $1}
 
@@ -494,12 +495,15 @@ primary_expression:                     /*(* 6.5.1. *)*/
 ;
 
 koocvariable:
-| LBRACKET IDENT DOT IDENT RBRACKET { KOOCVARIABLE (fst $2, fst $4), snd $2 }
+| kooc_annot LBRACKET IDENT DOT IDENT RBRACKET { KOOCVARIABLE ($1, fst $3, fst $5), snd $3 }
 
 koocall:
-| LBRACKET IDENT IDENT opt_koocall_param_list RBRACKET
-	   { KOOCALL (fst $2, fst $3, $4), snd $2 }
+| kooc_annot LBRACKET IDENT IDENT opt_koocall_param_list RBRACKET
+	   { KOOCALL ($1, fst $3, fst $4, $5), snd $3 }
 
+kooc_annot:
+  /* empty */ { None }
+| ANNOT LPAREN decl_spec_list RPAREN { Some (fst $3) }
 opt_koocall_param_list:
   /* empty */ { [] }
 | koocall_param_list { $1 }

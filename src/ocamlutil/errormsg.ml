@@ -120,7 +120,7 @@ let error (fmt : ('a,unit,doc,unit) format4) : 'a =
   let f d =
     hadErrors := true;
     if !colorFlag then output_string !logChannel redEscStr;
-    contextMessage "Error" d;
+    contextMessage "____Error" d;
     if !colorFlag then output_string !logChannel resetEscStr;
     flush !logChannel
   in
@@ -323,6 +323,7 @@ let parse_error (msg: string) : 'a =
     output_string stderr "Too many errors. Aborting.\n" ;
     exit 1 
   end;
+  print_endline "hlach";
   hadErrors := true;
   raise Parsing.Parse_error
 

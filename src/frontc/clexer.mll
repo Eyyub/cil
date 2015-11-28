@@ -523,6 +523,7 @@ rule initial =
 |		"++"			{PLUS_PLUS (currentLoc ())}
 |		"--"			{MINUS_MINUS (currentLoc ())}
 |		"->"			{ARROW}
+|               "@!"                    {ANNOT}
 |		'+'				{PLUS (currentLoc ())}
 |		'-'				{MINUS (currentLoc ())}
 |		'*'				{STAR (currentLoc ())}

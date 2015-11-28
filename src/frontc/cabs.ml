@@ -180,7 +180,7 @@ and kooc_decorator =
   | End of string * block * cabsloc
   | Callback of string * cabsloc
   | Mod of string * block * cabsloc
-  | Mod_impl of string * block * cabsloc
+  | Mod_impl of string * (*block*) definition list * cabsloc
   | Import of string * cabsloc
   | Class of string * block * cabsloc
 (* the string is a file name, and then the list of toplevel forms *)
@@ -270,12 +270,12 @@ and expression =
        __builtin_va_arg and the second argument is sizeof(T). This 
        should be printed as just T *)
   | CALL of expression * expression list
-  | KOOCALL of string * string * expression list
+  | KOOCALL of specifier option * string * string * expression list
   | COMMA of expression list
   | CONSTANT of constant
   | PAREN of expression
   | VARIABLE of string
-  | KOOCVARIABLE of string * string
+  | KOOCVARIABLE of specifier option * string * string
   | EXPR_SIZEOF of expression
   | TYPE_SIZEOF of specifier * decl_type
   | EXPR_ALIGNOF of expression

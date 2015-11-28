@@ -57,14 +57,15 @@ let mergedChannel : outfile option ref = ref None
 
 let parseOneFile (fname: string) : C.file =
   (* PARSE and convert to CIL *)
-  if !Cilutil.printStages then ignore (E.log "Parsing %s\n" fname);
+  ignore (E.log "Parsing %s\n" fname);
   let cil = F.parse fname () in
-  
+
   if (not (Feature.enabled "epicenter")) then (
     (* sm: remove unused temps to cut down on gcc warnings  *)
     (* (Stats.time "usedVar" Rmtmps.removeUnusedTemps cil);  *)
     (* (trace "sm" (dprintf "removing unused temporaries\n")); *)
-    (Rmtmps.removeUnusedTemps cil)
+    (* (Rmtmps.removeUnusedTemps cil); *)
+    Printf.printf "Cil globals len : %d\n" (List.length cil.Cil.globals);
   );
   cil
 
@@ -188,14 +189,19 @@ let theMain () =
 
     Ciloptions.fileNames := List.rev !Ciloptions.fileNames;
 
+    if !E.hadErrors then
+      print_endline "tozlerror";
     (* parse each of the files named on the command line, to CIL *)
     let files = Util.list_map parseOneFile !Ciloptions.fileNames in
+
+    if !E.hadErrors then
+      print_endline "tozlerror2";
 
     (* if there's more than one source file, merge them together; *)
     (* now we have just one CIL "file" to deal with *)
     let one =
       match files with
-        [one] -> one
+        [one] -> print_endline "tching"; one
       | [] -> E.s (E.error "No arguments for CIL")
       | _ ->
           let merged =
@@ -255,6 +261,7 @@ begin
   try 
     theMain (); 
   with F.CabsOnly -> (* this is OK *) ()
+     | e -> Printexc.to_string e |> Printf.printf "Err : %s\n"
 end;
 cleanup ();
 exit (if !failed then 1 else 0)

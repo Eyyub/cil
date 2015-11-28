@@ -1,4 +1,4 @@
-#include <stdio.h>
+//#include <stdio.h>
 /*
 int k;
 void	foo(char *a, int *b)
@@ -60,11 +60,52 @@ int __KOOC_3Foo_6foobar3int4char3int(char c, int a) { return 0; }*/
 /*
 int a;
 double a;*/
-@module Bar {
-  int foo(char c, int a);
-  int a = 3;
-}
-int main(void) { 
-  /*__KOOC_3Foo_3toz4void();printf("%c\n", __KOOC_3Foo_1a4char); __KOOC_3Foo_6foobar3int4char3int('l', 3);*/
-return (0);}
+/* @module Bar { */
+/*   int foo(char c, int a); */
+/*   char foo(char c, int a); */
+/*   int a = 3; */
+/* } */
+/* int main(void) {  */
+/*   int k; */
 
+/*   k = [Bar foo :'c' :9]; */
+/*   [Foo toz]; */
+/*   __KOOC_3Foo_3toz4void();printf("%c\n", __KOOC_3Foo_1a4char); __KOOC_3Foo_6foobar3int4char3int('l', 3); */
+/* return (0);} */
+/*struct bar { int x;};
+struct foo { char y;};
+char *toz(int n, char p) {
+  return 0;
+}
+*/
+@module A {
+  int c(void);
+  int c = 8;
+}
+@implementation A {
+ // int c = 8;
+  int lol(void)
+  {
+    return @!(int)[A lol];
+  }
+}
+void toz(int n) {}
+struct f {};
+int __KOOC_1A_1b_3int = 3;
+//extern int __KOOC_1A_1c_3int4void(void);
+int __KOOC_1A_1b_3int4void(void) { return 3 ;}
+int __KOOC_1A_1c_3int4void(void) { return 3 ;}
+int main(void)
+{
+//  struct foo e;
+//  struct bar k = 0.5;
+  
+//  @!(int)[A.b];
+  
+   toz(@!(int)[A.b]);
+   toz(@!(int)[A b]);
+   toz(@!(int)[A c]);
+//  char *p = toz(1.7, k);
+//  if(2 || k) {return 1;}
+  return 0;
+}

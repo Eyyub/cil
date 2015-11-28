@@ -502,7 +502,7 @@ and print_expression_level (lvl: int) (exp : expression) =
       print "(";
       print_comma_exps args;
       print ")"
-  | KOOCALL (modname, funcname, args) ->
+  | KOOCALL (annot, modname, funcname, args) ->
      print ("[" ^ modname ^ " " ^ funcname ^ " ");
      List.iter (fun a -> print ":"; print_expression a; print " ") args;
      print "]"
@@ -519,7 +519,7 @@ and print_expression_level (lvl: int) (exp : expression) =
   | VARIABLE name ->
       comprint "variable";
       print name
-  | KOOCVARIABLE (modname, varname) ->
+  | KOOCVARIABLE (annot, modname, varname) ->
      print ("[" ^ modname ^ "." ^ varname ^ "]");
   | EXPR_SIZEOF exp ->
       print "sizeof";
@@ -909,7 +909,7 @@ and print_decorator = function
      print_block b
   | Mod_impl (n, b, _) ->
      print ("@implementation(" ^ n ^ ")");
-     print_block b
+     List.iter print_def b
   | Import (n, _) ->
      print ("@import " ^ n)
 

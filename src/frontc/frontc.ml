@@ -257,6 +257,7 @@ let parse_helper fname =
   (* Now (return a function that will) convert to CIL *)
   fun _ ->
     (trace "sm" (dprintf "converting %s from Cabs to CIL\n" fname));
+    if !E.hadErrors then print_endline "cabs2cil before error";
     let cil = Stats.time "convert to CIL" Cabs2cil.convFile cabs in
     if !doPrintProtos then (printPrototypes cabs);
     cabs, cil

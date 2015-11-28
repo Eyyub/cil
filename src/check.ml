@@ -231,7 +231,8 @@ let rec checkType (t: typ) (ctx: ctxType) =
     ignore (warn "Type (%a) used in wrong context. Expected context: %a"
               d_plaintype t d_context ctx);
   match t with
-    (TVoid a | TBuiltin_va_list a) -> checkAttributes a
+  | TUnknown -> ()
+  | (TVoid a | TBuiltin_va_list a) -> checkAttributes a
   | TInt (ik, a) -> checkAttributes a
   | TFloat (_, a) -> checkAttributes a
   | TPtr (t, a) -> checkAttributes a;  checkType t CTPtr
@@ -423,7 +424,7 @@ and checkLval (isconst: bool) (forAddrof: bool) (lv: lval) : typ =
     Var vi, off -> 
       checkVariable vi; 
       checkOffset vi.vtype off
-
+  | Kooc_var {kvtyp; _}, _ -> kvtyp
   | Mem addr, off -> begin
       if isconst && not forAddrof then
         ignore (warn "Memory operation in constant");
@@ -835,6 +836,7 @@ and checkInstr (i: instr) =
       | _ -> ());
       checkExpType false e t
             
+  | Kooc_call _ -> assert false
   | Call(dest, what, args, l) -> 
       currentLoc := l;
       let (rt, formals, isva, fnAttrs) = 
@@ -1029,7 +1031,9 @@ let rec checkGlobal = function
           end;
           ())
         () (* final argument of withContext *)
-  end
+    end
+    | _ -> assert false
+
 
 
 let checkFile flags fl = 

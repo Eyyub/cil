@@ -270,6 +270,23 @@ let with_module_do f =
   current_global_types := theFileTypes;
   current_globals := theFile
 
+module S =
+  struct
+    type t = string
+    let equal = Pervasives.(=)
+    let hash = Hashtbl.hash
+  end
+
+module SH = Hashtbl.Make(S)
+
+let gmods : (string * typ) list SH.t = SH.create 8
+
+let collect_decl =
+  List.fold_left (fun acc -> function
+    | GVarDecl ({vname; vtype; _}, _) ->
+       (vname, vtype) :: acc
+    | _ -> acc) []
+
 (* Keep track of some variable ids that must be turned into definitions. We 
  * do this when we encounter what appears a definition of a global but 
  * without initializer. We leave it a declaration because maybe down the road 
@@ -619,6 +636,7 @@ let rec stripConstLocalType (t: typ) : typ =
     else a 
   in
   match t with 
+  | TUnknown -> TUnknown
   | TPtr (bt, a) -> 
       (* We want to be able to detect by pointer equality if the type has 
        * changed. So, don't realloc the type unless necessary. *)
@@ -1151,124 +1169,164 @@ module Kooc = struct
         SkipChildren
     end
 
-    (* let mangle_ikind_typ = function *)
-    (*   | IChar -> "4char" *)
-    (*   | IInt -> "3int" *)
-    (*   | IShort -> "5short" *)
-    (*   | ILong -> "4long" *)
-    (*   | _ -> assert false *)
+    let mangle_ikind_typ = function
+      | IChar -> "4char"
+      | IInt -> "3int"
+      | IShort -> "5short"
+      | ILong -> "4long"
+      | _ -> assert false
 
-    (* let mangle_fkind_typ = function *)
-    (*   | FFloat -> "5float" *)
-    (*   | FDouble -> "6double" *)
-    (*   | _ -> assert false *)
+    let mangle_fkind_typ = function
+      | FFloat -> "5float"
+      | FDouble -> "6double"
+      | _ -> assert false
 
-    (* let rec mangle_typ = function *)
-    (*   | TVoid _ -> "4void" *)
-    (*   | TInt (ikind, _) -> mangle_ikind_typ ikind *)
-    (*   | TFloat (fkind, _) -> mangle_fkind_typ fkind *)
-    (*   | TPtr (typ, _) -> assert false *)
-    (*   | TArray (typ, _, _) -> assert false *)
-    (*   | TFun (ret, params, _, _) -> *)
-    (*      params *)
-    (*      |> Cil.argsToList *)
-    (*      |> List.map (fun (_, typ, _) -> typ) *)
-    (*      |> List.map mangle_typ *)
-    (*      |> List.fold_left (^) "" *)
-    (*   | TNamed ({tname; _}, _) -> Printf.sprintf "%d%s" (String.length tname) tname *)
-    (*   | TComp ({cstruct; cname; _}, _) -> *)
-    (*      let ty = if cstruct then "struct" else "union" in *)
-    (*      let n = String.length ty + String.length cname + 1 (\* _ *\) in *)
-    (*      Printf.sprintf "%d%s_%s" n ty cname *)
-    (*   | TEnum ({ename; _}, _) -> *)
-    (*      let n = String.length ename + 5 (\* enum_ *\) in *)
-    (*      Printf.sprintf "%denum_%s" n ename *)
-    (*   | TBuiltin_va_list _ -> assert false *)
+    let rec mangle_typ = function
+      | TUnknown -> (*assert false*) "7unknown"
+      | TVoid _ -> "4void"
+      | TInt (ikind, _) -> mangle_ikind_typ ikind
+      | TFloat (fkind, _) -> mangle_fkind_typ fkind
+      | TPtr (typ, _) -> assert false
+      | TArray (typ, _, _) -> assert false
+      | TFun (ret, params, _, _) ->
+         print_endline "tfun";
+         let params =
+           params
+           |> Cil.argsToList
+           |> List.map (fun (_, typ, _) -> typ)
+         in
+         (if List.length params = 0 then [TVoid []] else params)
+         |> List.map mangle_typ
+         |> List.fold_left (^) (mangle_typ ret)
+      | TNamed ({tname; _}, _) -> Printf.sprintf "%d%s" (String.length tname) tname
+      | TComp ({cstruct; cname; _}, _) ->
+         let ty = if cstruct then "struct" else "union" in
+         let n = String.length ty + String.length cname + 1 (* _ *) in
+         Printf.sprintf "%d%s_%s" n ty cname
+      | TEnum ({ename; _}, _) ->
+         let n = String.length ename + 5 (* enum_ *) in
+         Printf.sprintf "%denum_%s" n ename
+      | TBuiltin_va_list _ -> assert false
 
-    (* let kooc_mangle modname name typ = *)
-    (*   let open Printf in *)
-    (*   let mangled_mn = sprintf "%d%s" (String.length modname) modname in *)
-    (*   let mangled_name = sprintf "%d%s" (String.length name) name in *)
-    (*   Printf.sprintf "__KOOC_%s_%s_%s" mangled_mn mangled_name (mangle_typ typ) *)
-
-    (* class module_deco_visitor modname = object *)
-    (*   inherit nopCilVisitor *)
-
-    (*   method! vblock b = print_endline "toz"; DoChildren *)
-
-    (*   method! vvrbl v = print_endline "tching"; DoChildren *)
-    (*   method! vvdec dec = *)
-    (*     print_endline "hey"; *)
-    (*     dec.vname <- kooc_mangle modname dec.vname dec.vtype; *)
-    (*     SkipChildren *)
-    (* end *)
-
-    let mangle_typ = function
-      | Tvoid -> "4void"
-      | Tchar -> "4char"
-      | Tbool -> "4bool"
-      | Tshort -> "5short"
-      | Tint -> "3int"
-      | Tlong -> "4long"
-      | Tint64 -> "5int64"
-      | Tfloat -> "5float"
-      | Tdouble -> "6double"
-      | Tnamed name -> Printf.sprintf "%d%s" (String.length name) name
-      | Tstruct (name, _, _) ->
-         let n = String.length name + 7 (* _ + struct *) in
-         Printf.sprintf "%dstruct_%s" n name
-      | Tunion (name, _, _) ->
-         let n = String.length name + 6 (* _ + union *) in
-         Printf.sprintf "%dunion_%s" n name
-      | Tenum (name, _, _) ->
-         let n = String.length name + 5 (* _ + enum *) in
-         Printf.sprintf "%denum_%s" n name
-      | _ -> E.s (E.bug "Can't mangle type")
-
-    let kooc_mangle v modname fname ret_ty ty =
-      Printf.sprintf "__KOOC_%d%s_%d%s%s%s"
-                     (String.length modname) modname
-                     (String.length fname) fname
-                     ret_ty
-                     (if ty = "" && v = `Fun then "4void" else "")
-
-    let change_name fname = function
-      | DECDEF ((specs, [(_, proto, attrs, loc), a]), loc') ->
-         DECDEF ((specs, [(fname, proto, attrs, loc), a]), loc')
-      | d -> d
+    let kooc_mangle modname name typ =
+      let open Printf in
+      let mangled_mn = sprintf "%d%s" (String.length modname) modname in
+      let mangled_name = sprintf "%d%s" (String.length name) name in
+      Printf.sprintf "__KOOC_%s_%s_%s" mangled_mn mangled_name (mangle_typ typ)
 
     class module_deco_visitor modname = object
-      inherit Cabsvisit.nopCabsVisitor
+      inherit nopCilVisitor
 
-      method vdef decl = match decl with
-        | DECDEF (([SpecType ret_ty], init_names), _) ->
-           (match init_names with
-           | [(fname, PROTO (JUSTBASE, params, _), _, _), _] ->
-              let fname =
-                List.map fst params
-                |> List.fold_left (fun acc ->
-                                   function
-                                   | [SpecType t] -> acc ^ mangle_typ t
-                                   | _ -> acc) "" 
-                |> kooc_mangle `Fun modname fname (mangle_typ ret_ty)
-              in
-              print_endline fname;
-              Cabsvisit.ChangeTo ([change_name fname decl])
-            | [(vname, JUSTBASE, _, _), _] ->
-               let vname = kooc_mangle `Var modname vname (mangle_typ ret_ty) "" in
-               Cabsvisit.ChangeTo ([change_name vname decl])
-            | _ -> Cabsvisit.SkipChildren
-           );
-           (* Cabsvisit.SkipChildren *)
-           (* let names = List.map (fun ((name, decl_ty, _, _), _) -> name, ty) init_names in *)
-        | _ -> Cprint.print_def decl; Cabsvisit.SkipChildren
+      method! vvdec dec =
+        print_endline "hey";
+        if dec.vglob then
+          dec.vname <- kooc_mangle modname dec.vname dec.vtype;
+        print_endline dec.vname;
+        DoChildren
+
     end
 
-    class class_deco_visitor name = object
-      inherit Cabsvisit.nopCabsVisitor
+    class cil_of_kooc_visitor = object
+      inherit nopCilVisitor
+
+      method! vglob = function
+        | GModule ({mname = name; mbody = body}, _)
+        | GImpl ({iname = name; ibody = body}, _) ->
+           let gls =
+             body
+             |> List.map (Cil.visitCilGlobal (new module_deco_visitor name))
+             |> List.fold_left (@) []
+           in
+           Printf.printf "len g %d\n" (List.length gls);
+           ChangeDoChildrenPost (gls, fun a -> a)
+
+        | _ -> DoChildren
+
+      method! vlval = function
+         | Kooc_var {kvmodname; kvname; kvtyp}, offset ->
+            let name = kooc_mangle kvmodname kvname kvtyp in
+            Printf.printf "Before : [%s.%s] After : %s" kvmodname kvname name;
+            let varinfo = Cil.makeVarinfo false name kvtyp in
+            ChangeTo (Var varinfo, offset)
+         | _ -> SkipChildren
+
+      method! vinst = function
+        | Kooc_call (kc, location) ->
+           let name = kooc_mangle kc.kcmodname kc.kcfuncname kc.kctyp in
+           let c =
+             let varinfo = Cil.makeVarinfo false name kc.kctyp in
+             let exp = Lval (Var varinfo, NoOffset) in
+             Call (kc.kcdest, exp, kc.kcargs, location)
+           in
+           ChangeTo [c]
+        | _ -> DoChildren
+    end
+    (* let mangle_typ = function *)
+    (*   | Tvoid -> "4void" *)
+    (*   | Tchar -> "4char" *)
+    (*   | Tbool -> "4bool" *)
+    (*   | Tshort -> "5short" *)
+    (*   | Tint -> "3int" *)
+    (*   | Tlong -> "4long" *)
+    (*   | Tint64 -> "5int64" *)
+    (*   | Tfloat -> "5float" *)
+    (*   | Tdouble -> "6double" *)
+    (*   | Tnamed name -> Printf.sprintf "%d%s" (String.length name) name *)
+    (*   | Tstruct (name, _, _) -> *)
+    (*      let n = String.length name + 7 (\* _ + struct *\) in *)
+    (*      Printf.sprintf "%dstruct_%s" n name *)
+    (*   | Tunion (name, _, _) -> *)
+    (*      let n = String.length name + 6 (\* _ + union *\) in *)
+    (*      Printf.sprintf "%dunion_%s" n name *)
+    (*   | Tenum (name, _, _) -> *)
+    (*      let n = String.length name + 5 (\* _ + enum *\) in *)
+    (*      Printf.sprintf "%denum_%s" n name *)
+    (*   | _ -> E.s (E.bug "Can't mangle type") *)
+
+    (* let kooc_mangle v modname fname ret_ty ty = *)
+    (*   Printf.sprintf "__KOOC_%d%s_%d%s%s%s" *)
+    (*                  (String.length modname) modname *)
+    (*                  (String.length fname) fname *)
+    (*                  ret_ty *)
+    (*                  (if ty = "" && v = `Fun then "4void" else "") *)
+
+    (* let change_name fname = function *)
+    (*   | DECDEF ((specs, [(_, proto, attrs, loc), a]), loc') -> *)
+    (*      DECDEF ((specs, [(fname, proto, attrs, loc), a]), loc') *)
+    (*   | d -> d *)
+
+    (* class module_deco_visitor modname = object *)
+    (*   inherit Cabsvisit.nopCabsVisitor *)
+
+    (*   method vdef decl = match decl with *)
+    (*     | DECDEF (([SpecType ret_ty], init_names), _) -> *)
+    (*        (match init_names with *)
+    (*        | [(fname, PROTO (JUSTBASE, params, _), _, _), _] -> *)
+    (*           let fname = *)
+    (*             List.map fst params *)
+    (*             |> List.fold_left (fun acc -> *)
+    (*                                function *)
+    (*                                | [SpecType t] -> acc ^ mangle_typ t *)
+    (*                                | _ -> acc) ""  *)
+    (*             |> kooc_mangle `Fun modname fname (mangle_typ ret_ty) *)
+    (*           in *)
+    (*           print_endline fname; *)
+    (*           Cabsvisit.ChangeTo ([change_name fname decl]) *)
+    (*         | [(vname, JUSTBASE, _, _), _] -> *)
+    (*            let vname = kooc_mangle `Var modname vname (mangle_typ ret_ty) "" in *)
+    (*            Cabsvisit.ChangeTo ([change_name vname decl]) *)
+    (*         | _ -> Cabsvisit.SkipChildren *)
+    (*        ); *)
+    (*        (\* Cabsvisit.SkipChildren *\) *)
+    (*        (\* let names = List.map (fun ((name, decl_ty, _, _), _) -> name, ty) init_names in *\) *)
+    (*     | _ -> Cprint.print_def decl; Cabsvisit.SkipChildren *)
+    (* end *)
+
+    (* class class_deco_visitor name = object *)
+    (*   inherit Cabsvisit.nopCabsVisitor *)
 
                 
-    end
+    (* end *)
 end
 
 (************ Labels ***********)
@@ -1664,7 +1722,8 @@ let cabsTypeAddAttributes a0 t =
         (* anything else: add a0 to existing attributes *)
           let add (a: attributes) = cabsAddAttributes a0 a in
           match t with
-            TVoid a -> TVoid (add a)
+          | TUnknown -> t
+          | TVoid a -> TVoid (add a)
           | TInt (ik, a) -> 
               (* Here we have to watch for the mode attribute *)
 (* sm: This stuff is to handle a GCC extension where you can request integers*)
@@ -3482,11 +3541,19 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
         let res = Const(CStr "exp_nothing") in
         finishExp empty res (typeOf res)
 
-    | A.KOOCVARIABLE (modname, name) ->
-       doExp asconst (A.VARIABLE (modname ^ "_" ^ name)) what
+    | A.KOOCVARIABLE (annot, kvmodname, kvname) ->
+       let kvtyp = match annot with 
+         | Some ty -> 
+            let ty, _, _, _ = doSpecList "" ty
+            in print_endline "toz"; ty
+         | None -> TUnknown
+       in
+       finishExp empty (Lval(Kooc_var {kvmodname; kvname; kvtyp
+                                      }, NoOffset)) kvtyp
     (* Do the potential lvalues first *)
     | A.VARIABLE n -> begin
         (* Look up in the environment *)
+        
         try
           let envdata = H.find env n in
           match envdata with
@@ -4093,7 +4160,9 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                  (ADrop|AType), _ -> false
                | _, (Mem e, off) -> not (isConstant e) 
                                     || not (isConstantOffset off)
+               | _, (Kooc_var _, off)
                | _, (Var _, off) -> not (isConstantOffset off)
+
              in
              let tmplv, se3 = 
                if needsTemp then
@@ -4173,6 +4242,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                  (ADrop|AType), _ -> false
                | _, (Mem e, off) -> not (isConstant e)
                                     || not (isConstantOffset off)
+               | _, (Kooc_var _, off)
                | _, (Var _, off) -> not (isConstantOffset off)
              in
              (* The type of the result is the type of the left-hand side  *) 
@@ -4222,9 +4292,212 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
               (Lval tmp)
               intType
     end
-    | A.KOOCALL (modname, funcname, args) ->
-       doExp asconst (A.CALL (VARIABLE (modname ^ "_" ^ funcname), args)) what
+    | A.KOOCALL (annot, kvmodname, kvname, args) ->
+       (* empty, Kooc_call (None, modname, funcname, List.map (doExp asconst) args |> List.map (fun _ _ a -> a), !currentLoc),TVoid [] *)
+       (* doExp asconst (A.CALL (VARIABLE (modname ^ "_" ^ funcname), args)) what *)
+        if asconst then
+          ignore (warn "CALL in constant");
+        let res_ty = match annot with
+          | Some ty ->
+             print_endline "---tytoz";
+             let ty', _, _, _ = doSpecList "" ty in ty'
+          | None -> TUnknown
+        in
+        let kvtyp = TFun (res_ty, Some [], false, []) in
+        let (sf, f', ft') = 
+          (empty, Lval(Kooc_var {kvmodname; kvname; kvtyp}, NoOffset), kvtyp)
+        in
+        (* Get the result type and the argument types *)
+        (* let (resType, argTypes, isvar, f'') = *)
+          (* match unrollType ft' with *)
+          (*   TFun(rt,at,isvar,a) -> (rt,at,isvar,f') *)
+          (* | TPtr (t, _) -> begin *)
+          (*     match unrollType t with  *)
+          (*       TFun(rt,at,isvar,a) -> (\* Make the function pointer  *)
+          (*                                   * explicit  *\) *)
+          (*         let f'' =  *)
+          (*           match f' with *)
+          (*             AddrOf lv -> Lval(lv) *)
+          (*           | _ -> Lval(mkMem f' NoOffset) *)
+          (*         in *)
+          (*         (rt,at,isvar, f'') *)
+          (*     | x ->  *)
+          (*         E.s (error "Unexpected type of the called function %a: %a"  *)
+          (*                d_exp f' d_type x) *)
+          (* end *)
+          (* | x ->  E.s (error "Unexpected type of the called function %a: %a"  *)
+          (*                d_exp f' d_type x) *)
+        (* in *)
+        (* let argTypesList = argsToList argTypes in *)
+        (* Drop certain qualifiers from the result type *)
+        (* let resType' = *)
+        (*   ref (typeRemoveAttributes ["warn_unused_result"] resType) in  *)
+        (* Before we do the arguments we try to intercept a few builtins. For 
+         * these we have defined then with a different type, so we do not 
+         * want to give warnings. We'll just leave the arguments of these
+         * functions alone*)
+        (* let isSpecialBuiltin =   *)
+        (*   match f'' with  *)
+        (*     Lval (Var fv, NoOffset) -> *)
+        (*       fv.vname = "__builtin_stdarg_start" || *)
+        (*       fv.vname = "__builtin_va_arg" || *)
+        (*       fv.vname = "__builtin_va_start" || *)
+        (*       fv.vname = "__builtin_expect" || *)
+        (*       fv.vname = "__builtin_next_arg" *)
+        (*     | _ -> false *)
+        (* in *)
+        (* let isBuiltinChooseExpr =  *)
+        (*   match f'' with  *)
+        (*     Lval (Var fv, NoOffset) -> *)
+        (*       fv.vname = "__builtin_choose_expr" *)
+        (*     | _ -> false *)
+        (* in *)
+        let (resType', argTypesList, isvar, f'') = ref res_ty, argsToList (*args*) (Some []), false, f' in
+        (** If the "--forceRLArgEval" flag was used, make sure
+          we evaluate args right-to-left.
+          Added by Nathan Cooprider. **)
+        let force_right_to_left_evaluation (c, e, t) =
+	  (* (\* If chunk is empty then it is not already evaluated *\) *)
+	  (* (\* constants don't need to be pulled out *\) *)
+          (* if (!forceRLArgEval && (not (isConstant e)) &&  *)
+	  (*     (not isSpecialBuiltin)) then  *)
+	  (*   (\* create a temporary *\) *)
+	  (*   let tmp = newTempVar (dd_exp () e) true t in *)
+	  (*   (\* create an instruction to give the e to the temporary *\) *)
+	  (*   let i = Set(var tmp, e, !currentLoc) in  *)
+	  (*   (\* add the instruction to the chunk *\) *)
+	  (*   (\* change the expression to be the temporary *\) *)
+	  (*   (c +++ i, (Lval(var tmp)), t)  *)
+          (* else *)
+	    (c, e, t)
+        in
+        (* Do the arguments. In REVERSE order !!! Both GCC and MSVC do this *)
+        let rec loopArgs 
+            : (string * typ * attributes) list * A.expression list 
+          -> (chunk list * exp list) = function
+            | ([], []) -> ([], [])
+
+            | args, [] -> 
+                (* if not isSpecialBuiltin then  *)
+                (*   ignore (warnOpt  *)
+                (*             "Too few arguments in call to %a." *)
+                (*             d_exp f'); *)
+		([], [])
+
+            | ((_, at, _) :: atypes, a :: args) -> 
+                let (ss, args') = loopArgs (atypes, args) in
+                (* Do not cast as part of translating the argument. We let 
+                 * the castTo do this work. This was necessary for 
+                 * test/small1/union5, in which a transparent union is passed 
+                 * as an argument *)
+                let (sa, a', att) = force_right_to_left_evaluation
+                                      (doExp false a (AExp None)) in
+                let (_, a'') = castTo att at a' in
+                (sa :: ss, a'' :: args')
+                  
+            | ([], args) -> (* No more types *)
+                (* if not isvar && argTypes != None && not isSpecialBuiltin then  *)
+                (*   (\* Do not give a warning for functions without a prototype*\) *)
+                (*   ignore (warnOpt "Too many arguments in call to %a" d_exp f'); *)
+                let rec loop = function
+                    [] -> ([], [])
+                  | a :: args -> 
+                      let (ss, args') = loop args in
+                      let (sa, a', at) = force_right_to_left_evaluation 
+                          (doExp false a (AExp None)) in
+                      (* if isBuiltinChooseExpr then *)
+                      (*     (\* This built-in function is analogous to the `? :' *)
+                      (*      * operator in C, except that the expression returned *)
+                      (*      * has its type unaltered by promotion rules.  *)
+                      (*      * -- gcc manual *\) *)
+                      (*     (sa :: ss, a' :: args') *)
+                      (* else *)
+                          let promoted_type = defaultArgumentPromotion at in
+                          let _, a'' = castTo at promoted_type a' in
+                          (sa :: ss, a'' :: args')
+                in
+                loop args
+        in
+
+        (* let (sargsl, args') = loopArgs (argTypesList, args) in *)
+        let chunk_args = List.map (fun a -> let sa, a, _ = doExp false a (AExp None) in sa, a) args in
+        let sargsl = List.map fst chunk_args in
+        let args = List.map snd chunk_args in
+        (* Setup some pointer to the elements of the call. We may change 
+         * these below *)
+	let sideEffects () = sf @@ (List.fold_left (@@) empty (List.rev sargsl)) in
+        let prechunk: (unit -> chunk) ref = ref sideEffects in (* comes before *)
+
+        (* Do we actually have a call, or an expression? *)
+        let piscall: bool ref = ref true in 
+
+        let pf: exp ref = ref f'' in (* function to call *)
+        let pargs: exp list ref = ref (*args'*) args in (* arguments *)
+        let pis__builtin_va_arg: bool ref = ref false in 
+        let pwhat: expAction ref = ref what in (* what to do with result *)
+
+        let pres: exp ref = ref zero in (* If we do not have a call, this is 
+                                        * the result *)
+        let prestype: typ ref = ref intType in
+
+
+        (* Now we must finish the call *)
+        if !piscall then begin 
+          let addCall (calldest: lval option) (res: exp) (t: typ) = 
+	    let prev = !prechunk () in
+            let dest, args = if !pis__builtin_va_arg then begin
+            (* Make an exception here for __builtin_va_arg:
+               hide calldest as a third parameter.  *)
+            match calldest with
+            | Some destlv -> None, !pargs @ [CastE(voidPtrType, AddrOf destlv)]
+            | None -> E.s (E.bug "__builtin_va_arg should have calldest always set")
+            end
+            else calldest, !pargs in
+            let kc =
+              {
+                kcdest = dest;
+                kcmodname = kvmodname;
+                kcfuncname = kvname;
+                kcargs = args;
+                kctyp = kvtyp;
+              }
+            in
+            prechunk := (fun _ -> prev +++ (Kooc_call(kc, !currentLoc)));
+            pres := res;
+            prestype := t
+          in
+          match !pwhat with 
+            ADrop -> addCall None zero intType
+
+          | AType -> prestype := !resType'
+                
+          | ASet(lv, vtype) when !doCollapseCallCast ||
+              (Util.equals (typeSig vtype) (typeSig !resType'))
+              ->
+              (* We can assign the result directly to lv *)
+              addCall (Some lv) (Lval(lv)) vtype
+                  
+          | _ -> begin
+              let restype'' = 
+                match !pwhat with
+                  AExp (Some t) when !doCollapseCallCast -> t
+                | ASet (_, t) when !pis__builtin_va_arg -> t
+                | _ -> !resType'
+              in
+              let descr = dprintf "%a(%a)" dd_exp !pf
+                            (docList ~sep:(text ", ") (dd_exp ())) !pargs in
+              let tmp = newTempVar descr false restype'' in
+              (* Remember that this variable has been created for this 
+               * specific call. We will use this in collapseCallCast. *)
+              IH.add callTempVars tmp.vid ();
+              addCall (Some (var tmp)) (Lval(var tmp)) restype''
+          end
+        end;
+              
+        finishExp (!prechunk ()) !pres !prestype
+      (* END A.KOOCALL *)
     | A.CALL(f, args) -> 
+       if !E.hadErrors then print_endline "err before call";
         if asconst then
           ignore (warn "CALL in constant");
         let (sf, f', ft') = 
@@ -4339,6 +4612,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                  * the castTo do this work. This was necessary for 
                  * test/small1/union5, in which a transparent union is passed 
                  * as an argument *)
+                print_endline "twotoz";
                 let (sa, a', att) = force_right_to_left_evaluation
                                       (doExp false a (AExp None)) in
                 let (_, a'') = castTo att at a' in
@@ -4624,8 +4898,9 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
           end
         end;
               
-        finishExp (!prechunk ()) !pres !prestype
 
+       if !E.hadErrors then print_endline "err after call";
+        finishExp (!prechunk ()) !pres !prestype
           
     | A.COMMA el ->
         if asconst then 
@@ -6247,7 +6522,7 @@ and doDecl (isglobal: bool) : A.definition -> chunk = function
                 if e.vname = "exit" then false 
                 else if hasAttribute "noreturn" e.vattr then false
                 else true
-            | Call _ -> true
+            | Call _ | Kooc_call _ -> true
             | Asm _ -> true
             in 
             let rec stmtFallsThrough (s: stmt) : bool = 
@@ -6860,14 +7135,16 @@ and do_kooc_decorator = function
      let modloc = convLoc loc in
      currentLoc := modloc;
      with_module_do (fun () -> doBody ~global:true blk);
-     cabsPushGlobal (GModule ({mname; mbody = !module_global_types @ !module_globals }, modloc));
+     let mbody = !module_global_types @ !module_globals in
+     SH.add gmods mname (collect_decl mbody);
+     cabsPushGlobal (GModule ({mname; mbody}, modloc));
      clean_module_globals ();
      empty
 
   | Mod_impl (iname, blk, loc) ->
      let implloc = convLoc loc in
      currentLoc := implloc;
-     with_module_do (fun () -> doBody ~global:true blk);
+     with_module_do (fun () -> List.iter (fun d -> ignore (doDecl true d)) blk);
      cabsPushGlobal (GImpl ({iname; ibody = !module_global_types @ !module_globals }, implloc));
      clean_module_globals ();
      empty
@@ -6962,8 +7239,18 @@ let convFile (f : A.file) : Cil.file =
           cabsPushGlobal (GText(Buffer.contents buff))
     end 
   in
+  if !E.hadErrors then print_endline "error before doOneGlobal";
   List.iter doOneGlobal dl;
-  let globals = ref (popGlobals ()) in
+  if !E.hadErrors then print_endline "error before cok_vis";
+  let cok_vis = new Kooc.cil_of_kooc_visitor in
+  let globals =
+    popGlobals ()
+    |> List.map (Cil.visitCilGlobal cok_vis)
+    |> List.fold_left (@) []
+    |> ref
+  in
+  Printf.printf "Globals len : %d\n" (List.length !globals);
+  if !E.hadErrors then print_endline "error after cok_vis";
 
   IH.clear noProtoFunctions;
   IH.clear mustTurnIntoDef;  

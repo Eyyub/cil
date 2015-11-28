@@ -253,6 +253,7 @@ let rec stripCastsDeepForPtrArith (e:exp): exp =
 
 and stripCastsForPtrArithLval (lv : lval) : lval =
   match lv with
+  | Kooc_var _, off -> fst lv, stripCastsForPtrArithOff off
   | (Var vi, off) -> (Var vi, stripCastsForPtrArithOff off)
   | (Mem e, off) ->
       let e = stripCastsDeepForPtrArith e in

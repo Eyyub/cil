@@ -184,6 +184,7 @@ and global =
 
 and typ =
     TVoid of attributes   (** Void type. Also predefined as {!Cil.voidType} *)
+  | TUnknown
   | TInt of ikind * attributes 
      (** An integer type. The kind specifies the sign and width. Several 
       * useful variants are predefined as {!Cil.intType}, {!Cil.uintType}, 
@@ -765,11 +766,17 @@ and lhost =
   | Var        of varinfo    
     (** The host is a variable. *)
 
+  | Kooc_var of koocvarinfo
   | Mem        of exp        
     (** The host is an object of type [T] when the expression has pointer 
      * [TPtr(T)]. *)
 
-
+and koocvarinfo =
+  {
+    kvmodname : string;
+    kvname : string;
+    mutable kvtyp : typ;
+  }
 (** The offset part of an {!Cil.lval}. Each offset can be applied to certain 
   * kinds of lvalues and its effect is that it advances the starting address 
   * of the lvalue and changes the denoted type, essentially focusing to some 
@@ -1032,6 +1039,8 @@ and instr =
     * "__builtin_va_arg". In this case the second argument (which should be a 
     * type T) is encoded SizeOf(T) *)
 
+  | Kooc_call       of koocall_info * location (*lval option * string * string * exp list * typ * location*)
+
   | Asm        of attributes * (* Really only const and volatile can appear 
                                * here *)
                   string list *         (* templates (CR-separated) *)
@@ -1106,6 +1115,15 @@ and implinfo =
   {
     iname : string;
     ibody : global list;
+  }
+(* lval option * string * string * exp list * typ * location*)
+and koocall_info =
+  {
+    kcdest : lval option;
+    kcmodname : string;
+    kcfuncname : string;
+    kcargs : exp list;
+    mutable kctyp : typ;
   }
 
 (** Describes a location in a source file. *)
@@ -1878,6 +1896,7 @@ class type cilVisitor = object
      * the type and attributes of the variable are not traversed for a 
      * variable use *)
 
+  method vkvrbl : koocvarinfo -> koocvarinfo visitAction
   method vexpr: exp -> exp visitAction          
     (** Invoked on each expression occurrence. The subtrees are the 
      * subexpressions, the types (for a [Cast] or [SizeOf] expression) or the 

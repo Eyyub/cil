@@ -348,7 +348,10 @@ and children_decorator vis deco = match deco with
      let blk' = visitCabsBlock vis blk in
      if blk != blk' then Mod (s, blk', loc) else deco
   | Mod_impl (s, blk, loc) ->
-     let blk' = visitCabsBlock vis blk in
+     let blk' =
+       List.map (visitCabsDefinition vis) blk
+       |> List.fold_left (@) []
+     in
      if blk != blk' then Mod_impl (s, blk', loc) else deco
   | Class (s, blk, loc) ->
      let blk' = visitCabsBlock vis blk in

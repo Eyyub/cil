@@ -733,8 +733,8 @@ begin
     CALL(tfunc, targs) ->
       (ue pfunc tfunc) @
       (unifyExprs pargs targs)
-  | KOOCALL (pn, pfunc, pargs),
-    KOOCALL (tn, tfunc, targs) ->
+  | KOOCALL (pannot, pn, pfunc, pargs),
+    KOOCALL (tannot, tn, tfunc, targs) ->
        mustEq pn tn;
        (ue (VARIABLE pfunc) (VARIABLE tfunc)) @
        (unifyExprs pargs targs)

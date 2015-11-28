@@ -223,6 +223,7 @@ and global =
  * of named types. *)
 and typ =
     TVoid of attributes   (** Void type *)
+  | TUnknown
   | TInt of ikind * attributes (** An integer type. The kind specifies 
                                        the sign and width. *)
   | TFloat of fkind * attributes (** A floating-point type. The kind 
@@ -602,11 +603,18 @@ and lhost =
   | Var        of varinfo    
     (** The host is a variable. *)
 
+  | Kooc_var   of koocvarinfo 
+
   | Mem        of exp        
     (** The host is an object of type [T] when the expression has pointer 
      * [TPtr(T)]. *)
 
-
+and koocvarinfo =
+  {
+    kvmodname : string;
+    kvname : string;
+    mutable kvtyp : typ;
+  }
 (** The offset part of an {!Cil.lval}. Each offset can be applied to certain 
   * kinds of lvalues and its effect is that it advances the starting address 
   * of the lvalue and changes the denoted type, essentially focussing to some 
@@ -825,6 +833,7 @@ and instr =
                              the same as the declared type of the function 
                              result then an implicit cast exists. *)
 
+  | Kooc_call of koocall_info * location (*lval option * string * string * exp list * typ * location*)
                          (* See the GCC specification for the meaning of ASM. 
                           * If the source is MS VC then only the templates 
                           * are used *)
@@ -880,6 +889,15 @@ and implinfo =
   {
     iname : string;
     ibody : global list;
+  }
+
+and koocall_info =
+  {
+    kcdest : lval option;
+    kcmodname : string;
+    kcfuncname : string;
+    kcargs : exp list;
+    mutable kctyp : typ;
   }
 
 let locUnknown = { line = -1; 
@@ -964,6 +982,8 @@ class type cilVisitor = object
      * the type and attributes of the variable are not traversed for a 
      * variable use *)
 
+  method vkvrbl : koocvarinfo -> koocvarinfo visitAction
+
   method vexpr: exp -> exp visitAction          
     (** Invoked on each expression occurence. The subtrees are the 
      * subexpressions, the types (for a [Cast] or [SizeOf] expression) or the 
@@ -1023,6 +1043,7 @@ end
 (* not stop; hence they return true *)
 class nopCilVisitor : cilVisitor = object
   method vvrbl (v:varinfo) = DoChildren (* variable *)
+  method vkvrbl kv = DoChildren
   method vvdec (v:varinfo) = DoChildren (* variable 
                                                                * declaration *)
   method vexpr (e:exp) = DoChildren   (* expression *) 
@@ -1085,8 +1106,9 @@ let stripUnderscores (s: string) : string =
 
 let get_instrLoc (inst : instr) =
   match inst with
-      Set(_, _, loc) -> loc
-    | Call(_, _, _, loc) -> loc
+      Set(_, _, loc)
+    | Call(_, _, _, loc)
+    | Kooc_call (_, loc)
     | Asm(_, _, _, _, _, loc) -> loc
 let get_globalLoc (g : global) =
   match g with
@@ -1497,6 +1519,7 @@ let copyCompInfo (ci: compinfo) (n: string) : compinfo =
 
 let rec typeAttrs = function
     TVoid a -> a
+  | TUnknown -> []
   | TInt (_, a) -> a
   | TFloat (_, a) -> a
   | TNamed (t, a) -> addAttributes a (typeAttrs t.ttype)
@@ -1520,7 +1543,7 @@ let setTypeAttrs t a =
   | TEnum (enum, _) -> TEnum (enum, a)
   | TFun (r, args, v, _) -> TFun(r,args,v,a)
   | TBuiltin_va_list _ -> TBuiltin_va_list a
-
+  | _ -> t
 
 let typeAddAttributes a0 t =
 begin
@@ -1542,6 +1565,7 @@ begin
       | TComp (comp, a) -> TComp (comp, add a)
       | TNamed (t, a) -> TNamed (t, add a)
       | TBuiltin_va_list a -> TBuiltin_va_list (add a)
+      | _ -> t
 end
 
 let typeRemoveAttributes (anl: string list) t = 
@@ -1557,6 +1581,7 @@ let typeRemoveAttributes (anl: string list) t =
   | TComp (comp, a) -> TComp (comp, drop a)
   | TNamed (t, a) -> TNamed (t, drop a)
   | TBuiltin_va_list a -> TBuiltin_va_list (drop a)
+  | _ -> t
 
 let unrollType (t: typ) : typ = 
   let rec withAttrs (al: attributes) (t: typ) : typ =     
@@ -1798,11 +1823,11 @@ let getParenthLevel (e: exp) =
 
                                         (* Lvals *)
   | Lval(Mem _ , _) -> derefStarLevel (* 20 *)                   
-  | Lval(Var _, (Field _|Index _)) -> indexLevel (* 20 *)
+  | Lval(_, (Field _|Index _)) -> indexLevel (* 20 *)
   | SizeOf _ | SizeOfE _ | SizeOfStr _ -> 20
   | AlignOf _ | AlignOfE _ -> 20
 
-  | Lval(Var _, NoOffset) -> 0        (* Plain variables *)
+  | Lval(_, NoOffset) -> 0        (* Plain variables *)
   | Const _ -> 0                        (* Constants *)
 
 
@@ -1907,6 +1932,8 @@ and typeOfInit (i: init) : typ =
 
 and typeOfLval = function
     Var vi, off -> typeOffset vi.vtype off
+  | Kooc_var {kvtyp=TFun (ty, _, _, _); _}, _ -> ty
+  | Kooc_var {kvtyp; _}, _ -> kvtyp
   | Mem addr, off -> begin
       match unrollType (typeOf addr) with
         TPtr (t, _) -> typeOffset t off
@@ -2176,6 +2203,7 @@ let rec alignOf_int t =
         
     | TFun _ as t -> raise (SizeOfError ("function", t))
     | TVoid _ as t -> raise (SizeOfError ("void", t))
+    | TUnknown -> raise (SizeOfError("<unknown>", t))
   in
   match filterAttributes "aligned" (typeAttrs t) with
     [] -> 
@@ -2485,7 +2513,7 @@ and bitsSizeOf t =
       0
 
   | TFun _ -> raise (SizeOfError ("function", t))
-
+  | TUnknown -> raise (SizeOfError ("<unknown>", t))
 
 and addTrailing nrbits roundto = 
     (nrbits + roundto - 1) land (lnot (roundto - 1))
@@ -2626,7 +2654,7 @@ and constFoldLval machdep (host,offset) =
   let newhost = 
     match host with
     | Mem e -> Mem (constFold machdep e)
-    | Var _ -> host
+    | (*Var*) _ -> host
   in
   let rec constFoldOffset machdep = function
     | NoOffset -> NoOffset
@@ -3324,6 +3352,8 @@ class defaultCilPrinterClass : cilPrinter = object (self)
   method pLval () (lv:lval) =  (* lval (base is 1st field)  *)
     match lv with
       Var vi, o -> self#pOffset (self#pVar vi) o
+    | Kooc_var {kvmodname; kvname; _}, _ ->
+       text (Printf.sprintf "[%s.%s]" kvmodname kvname)
     | Mem e, Field(fi, o) ->
         self#pOffset
           ((self#pExpPrec arrowLevel () e) ++ text ("->" ^ fi.fname)) o
@@ -3673,6 +3703,21 @@ class defaultCilPrinterClass : cilPrinter = object (self)
                    (self#pExp ()) () args)
              ++ unalign)
         ++ text (")" ^ printInstrTerminator)
+    | Kooc_call ({kcdest; kcmodname; kcfuncname; kcargs; _}, l) ->
+        self#pLineDirective l
+          ++ (match kcdest with
+            None -> nil
+          | Some lv -> 
+              self#pLval () lv ++ text " = " )
+          ++ text (Printf.sprintf "[%s %s " kcmodname kcfuncname) ++
+
+          (align
+             (* Now the arguments *)
+           ++ (List.fold_left (fun acc e -> acc ++ text ":" ++ (self#pExp () e) ++ break) (text "") kcargs)
+             (* ++ (docList ~sep:(chr ',' ++ break)  *)
+             (*       (self#pExp ()) () args) *)
+             ++ unalign)
+        ++ text ("]" ^ printInstrTerminator)
 
     | Asm(attrs, tmpls, outs, ins, clobs, l) ->
         if !msvcMode then
@@ -4224,7 +4269,7 @@ class defaultCilPrinterClass : cilPrinter = object (self)
           ++ self#pAttrs () a 
           ++ text " " 
           ++ name
-
+    | TUnknown -> text "<unknown>"
     | TInt (ikind,a) -> 
         d_ikind () ikind 
           ++ self#pAttrs () a 
@@ -4626,6 +4671,7 @@ class plainCilPrinterClass =
 
  method private pOnlyType () = function 
      TVoid a -> dprintf "TVoid(@[%a@])" self#pAttrs a
+   | TUnknown -> dprintf "TUnknown"
    | TInt(ikind, a) -> dprintf "TInt(@[%a,@?%a@])" 
          d_ikind ikind self#pAttrs a
    | TFloat(fkind, a) -> 
@@ -4775,6 +4821,7 @@ class plainCilPrinterClass =
   method pLval () (lv: lval) =  
     match lv with 
     | Var vi, o -> dprintf "Var(@[%s,@?%a@])" vi.vname self#d_plainoffset o
+    | Kooc_var {kvmodname; kvname; _} , _ -> dprintf "Kooc_var(%s, %s)" kvmodname kvname
     | Mem e, o -> dprintf "Mem(@[%a,@?%a@])" self#pExp e self#d_plainoffset o
 
 
@@ -5293,6 +5340,11 @@ and childrenLval (vis: cilVisitor) (lv: lval) : lval =
       let v'   = doVisit vis (vis#vvrbl v) (fun _ x -> x) v in
       let off' = vOff off in
       if v' != v || off' != off then Var v', off' else lv
+  | Kooc_var kv, off ->
+     print_endline "harg";
+     let kv' = doVisit vis (vis#vkvrbl kv) (fun _ x -> x) kv in
+     let off' = vOff off in
+      if kv' != kv || off' != off then Kooc_var kv', off' else lv
   | Mem e, off -> 
       let e' = vExp e in
       let off' = vOff off in
@@ -5346,6 +5398,15 @@ and childrenInstr (vis: cilVisitor) (i: instr) : instr =
       if lv' != lv || fn' != fn || args' != args 
       then Call(Some lv', fn', args', l) else i
 
+  | Kooc_call ({kcdest=None; kcargs; _} as kc, l) -> 
+      let args' = mapNoCopy fExp kcargs in
+      if args' != kcargs then Kooc_call ({kc with kcargs = args'}, l) else i
+  | Kooc_call ({kcdest=Some lv; kcargs; _} as kc, l) -> 
+      let lv' = fLval lv in
+      let args' = mapNoCopy fExp kcargs in
+      if lv' != lv || args' != kcargs 
+      then Kooc_call({kc with kcdest = Some lv'; kcargs = args'}, l) else i
+ 
   | Asm(sl,isvol,outs,ins,clobs,l) -> 
       let outs' = mapNoCopy (fun ((id,s,lv) as pair) -> 
                                let lv' = fLval lv in
@@ -5683,7 +5744,9 @@ and childrenGlobal (vis: cilVisitor) (g: global) : global =
         [a'] -> if a' != a then GPragma (a', l) else g
       | _ -> E.s (E.unimp "visitCilAttributes returns more than one attribute")
   end
-  | _ -> g
+  | GModule (mi, l) -> print_endline "assert false";
+     assert false
+  | _ -> assert false
 
 
 (** A visitor that does constant folding. If "machdep" is true then we do 
@@ -6012,6 +6075,7 @@ let rec typeSigWithAttrs ?(ignoreSign=false) doattr t =
       TSBase (TInt (ik', doattr al))
   | TFloat (fk, al) -> TSBase (TFloat (fk, doattr al))
   | TVoid al -> TSBase (TVoid (doattr al))
+  | TUnknown -> failwith "cil.ml:6049 unknown"
   | TEnum (enum, a) -> TSEnum (enum.ename, doattr a)
   | TPtr (t, a) -> TSPtr (typeSig t, doattr a)
   | TArray (t,l,a) -> (* We do not want fancy expressions in array lengths. 
@@ -6143,6 +6207,7 @@ let rec isConstant = function
   | AddrOf (Mem e, off) | StartOf(Mem e, off) 
         -> isConstant e && isConstantOffset off
   | AddrOfLabel _ -> true
+  | _ -> false (* Kooc_var *)
 
 and isConstantOffset = function
     NoOffset -> true
